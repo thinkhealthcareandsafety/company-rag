@@ -8,6 +8,10 @@ services:
     name: company-rag
     runtime: node
     plan: free
+    # NODE_ENV=production must NOT be set as a build-time env var here: it
+    # makes `npm install` skip devDependencies (typescript, tsx, ...), which
+    # both `next build` and the db:migrate:prod start step need. Render sets
+    # its own build-vs-runtime NODE_ENV correctly without this.
     buildCommand: npm install && npm run build
     # Migration is idempotent (CREATE TABLE/EXTENSION IF NOT EXISTS) so it's
     # safe to run on every start, which is the only reliable "run this once
@@ -18,8 +22,6 @@ services:
         fromDatabase:
           name: company-rag-db
           property: connectionString
-      - key: NODE_ENV
-        value: production
       - key: NEXTAUTH_URL
         sync: false
       - key: NEXTAUTH_SECRET
