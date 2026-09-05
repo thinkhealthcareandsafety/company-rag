@@ -1,0 +1,42 @@
+databases:
+  - name: company-rag-db
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: company-rag
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    # Migration is idempotent (CREATE TABLE/EXTENSION IF NOT EXISTS) so it's
+    # safe to run on every start, which is the only reliable "run this once
+    # after deploy" hook available without shell access on the free plan.
+    startCommand: npm run db:migrate:prod && npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: company-rag-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+      - key: NEXTAUTH_URL
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ZOHO_CLIENT_ID
+        sync: false
+      - key: ZOHO_CLIENT_SECRET
+        sync: false
+      - key: ZOHO_REFRESH_TOKEN
+        sync: false
+      - key: ZOHO_ACCOUNTS_BASE_URL
+        sync: false
+      - key: ZOHO_API_BASE_URL
+        sync: false
+      - key: ZOHO_BOOKS_ORGANIZATION_ID
+        sync: false
+      - key: CRM_SYNC_SECRET
+        sync: false
