@@ -116,12 +116,30 @@ function DraftMessageButton({ facts }: { facts: DraftMessageFacts }) {
   }
 
   async function handleCopy() {
+    let ok = false;
     try {
       await navigator.clipboard.writeText(draft);
+      ok = true;
+    } catch {
+      // The async Clipboard API is permission-gated and can silently fail in
+      // some browser contexts (e.g. no user-activation heuristics met) —
+      // execCommand is deprecated but still the reliable synchronous fallback.
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = draft;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch {
+        ok = false;
+      }
+    }
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard access denied — the text is still visible to select/copy manually
     }
   }
 
