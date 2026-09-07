@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { TopNav } from "@/components/TopNav";
 import { PageLoader } from "@/components/Loader";
 import type { Digest } from "@/lib/digest";
+import type { DraftMessageFacts } from "@/lib/draftMessage";
 
 const SECTION_TITLE_STYLE: React.CSSProperties = { fontSize: "1rem", fontWeight: 700, margin: "0 0 0.75rem" };
 const ROW_STYLE: React.CSSProperties = {
@@ -82,6 +83,90 @@ function ExpandableList<T extends { id: string }>({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Drafts text only — there is deliberately no send action anywhere in this
+ * component. The user reviews and copies the message, then sends it
+ * themselves however they choose (WhatsApp, email, ...).
+ */
+function DraftMessageButton({ facts }: { facts: DraftMessageFacts }) {
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [draft, setDraft] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  async function handleDraft() {
+    setState("loading");
+    setCopied(false);
+    try {
+      const res = await fetch("/api/digest/draft-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(facts),
+      });
+      if (!res.ok) throw new Error("Failed to draft a message");
+      const data = await res.json();
+      setDraft(data.message as string);
+      setState("done");
+    } catch {
+      setState("error");
+    }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard access denied — the text is still visible to select/copy manually
+    }
+  }
+
+  if (state === "idle" || state === "loading") {
+    return (
+      <button type="button" className="regen-btn" onClick={handleDraft} disabled={state === "loading"}>
+        {state === "loading" ? "Drafting…" : "✎ Draft message"}
+      </button>
+    );
+  }
+
+  if (state === "error") {
+    return (
+      <button type="button" className="regen-btn" onClick={handleDraft} style={{ color: "var(--danger)" }}>
+        Failed — retry
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ width: "100%", marginTop: "0.5rem" }}>
+      <div
+        style={{
+          padding: "0.7rem 0.85rem",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius)",
+          background: "var(--surface-hover)",
+          fontSize: "0.85rem",
+          lineHeight: 1.5,
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {draft}
+      </div>
+      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.4rem" }}>
+        <button type="button" className="btn" onClick={handleCopy} style={{ height: 28, fontSize: "0.75rem", padding: "0 0.6rem" }}>
+          {copied ? "Copied!" : "Copy"}
+        </button>
+        <button type="button" className="btn" onClick={handleDraft} style={{ height: 28, fontSize: "0.75rem", padding: "0 0.6rem" }}>
+          Redraft
+        </button>
+      </div>
+      <p style={{ fontSize: "0.7rem", color: "var(--text-faint)", margin: "0.35rem 0 0" }}>
+        Not sent automatically — copy and send it yourself.
+      </p>
     </div>
   );
 }
@@ -185,16 +270,28 @@ export function DigestPage() {
                 items={digest.overdueInvoices.items}
                 emptyLabel="No overdue invoices."
                 renderRow={(inv) => (
-                  <div style={ROW_STYLE}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: "0.9rem" }}>{String(inv.customerName ?? "Unknown customer")}</div>
-                      <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                        Invoice {String(inv.invoiceNumber ?? "")} · due {String(inv.dueDate ?? "")}
+                  <div style={{ padding: "0.75rem 1rem", display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: "0.9rem" }}>{String(inv.customerName ?? "Unknown customer")}</div>
+                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                          Invoice {String(inv.invoiceNumber ?? "")} · due {String(inv.dueDate ?? "")}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--danger)", flexShrink: 0 }}>
+                        {String(inv.currencyCode ?? "")} {String(inv.balance ?? "")}
                       </div>
                     </div>
-                    <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--danger)", flexShrink: 0 }}>
-                      {String(inv.currencyCode ?? "")} {String(inv.balance ?? "")}
-                    </div>
+                    <DraftMessageButton
+                      facts={{
+                        kind: "overdue_invoice",
+                        customerName: String(inv.customerName ?? "Unknown customer"),
+                        invoiceNumber: String(inv.invoiceNumber ?? ""),
+                        balance: String(inv.balance ?? ""),
+                        currencyCode: String(inv.currencyCode ?? ""),
+                        dueDate: String(inv.dueDate ?? ""),
+                      }}
+                    />
                   </div>
                 )}
               />
@@ -225,16 +322,27 @@ export function DigestPage() {
                 items={digest.staleDeals}
                 emptyLabel="No stale deals."
                 renderRow={(deal) => (
-                  <div style={ROW_STYLE}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: "0.9rem" }}>{String(deal.dealName ?? "Unnamed deal")}</div>
-                      <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                        {String(deal.stage ?? "")} · last updated {String(deal.modifiedTime ?? "").slice(0, 10)}
+                  <div style={{ padding: "0.75rem 1rem", display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: "0.9rem" }}>{String(deal.dealName ?? "Unnamed deal")}</div>
+                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                          {String(deal.stage ?? "")} · last updated {String(deal.modifiedTime ?? "").slice(0, 10)}
+                        </div>
                       </div>
+                      {deal.amount !== undefined && deal.amount !== null && (
+                        <div style={{ fontSize: "0.9rem", fontWeight: 600, flexShrink: 0 }}>{String(deal.amount)}</div>
+                      )}
                     </div>
-                    {deal.amount !== undefined && deal.amount !== null && (
-                      <div style={{ fontSize: "0.9rem", fontWeight: 600, flexShrink: 0 }}>{String(deal.amount)}</div>
-                    )}
+                    <DraftMessageButton
+                      facts={{
+                        kind: "stale_deal",
+                        dealName: String(deal.dealName ?? "Unnamed deal"),
+                        stage: String(deal.stage ?? ""),
+                        lastActivityDate: String(deal.modifiedTime ?? "").slice(0, 10),
+                        amount: deal.amount !== undefined && deal.amount !== null ? String(deal.amount) : undefined,
+                      }}
+                    />
                   </div>
                 )}
               />
