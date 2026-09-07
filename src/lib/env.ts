@@ -55,3 +55,15 @@ let zohoBooksEnv: z.infer<typeof zohoBooksSchema> | undefined;
 export function getZohoBooksEnv() {
   return (zohoBooksEnv ??= validate(zohoBooksSchema, "Zoho Books"));
 }
+
+/**
+ * Redis is optional infrastructure (shared rate-limit state across multiple
+ * server instances) — unlike the schemas above, missing config here isn't an
+ * error, it just means the caller should fall back to an in-memory limiter.
+ */
+export function getRedisEnv(): { UPSTASH_REDIS_REST_URL: string; UPSTASH_REDIS_REST_TOKEN: string } | undefined {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return undefined;
+  return { UPSTASH_REDIS_REST_URL: url, UPSTASH_REDIS_REST_TOKEN: token };
+}

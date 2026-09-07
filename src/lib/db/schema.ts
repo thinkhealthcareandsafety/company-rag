@@ -111,6 +111,19 @@ export const chatMessages = pgTable(
   (table) => [index("chat_messages_conversation_id_idx").on(table.conversationId)],
 );
 
+export const errorLogs = pgTable(
+  "error_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    message: text("message").notNull(),
+    stack: text("stack"),
+    // Free-form: { route?, userId?, conversationId? } — whatever the call site knew.
+    context: jsonb("context"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("error_logs_created_at_idx").on(table.createdAt)],
+);
+
 export type User = typeof users.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type DocumentChunk = typeof documentChunks.$inferSelect;
@@ -118,3 +131,4 @@ export type CrmEntity = typeof crmEntityIndex.$inferSelect;
 export type PromptShortcut = typeof promptShortcuts.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type ChatMessageRow = typeof chatMessages.$inferSelect;
+export type ErrorLog = typeof errorLogs.$inferSelect;

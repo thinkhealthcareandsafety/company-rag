@@ -278,6 +278,38 @@ button {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 15%, transparent);
 }
 
+.page-loader {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  padding: 3rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.page-loader-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(217, 79, 168, 0.15);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+
+.inline-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(217, 79, 168, 0.2);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+  vertical-align: -2px;
+}
+
 .error-text {
   color: var(--danger);
   font-size: 0.85rem;
@@ -958,6 +990,79 @@ button {
   background: rgba(20, 21, 26, 0.14);
   color: var(--text-faint);
   cursor: not-allowed;
+}
+
+.chat-stop-btn {
+  background: var(--text-primary, #14151a);
+}
+
+.stop-square {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: #fff;
+  display: block;
+}
+
+.regen-btn {
+  margin-top: 0.6rem;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.regen-btn:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  color: var(--text-primary, #14151a);
+}
+
+.source-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+
+.source-citation {
+  display: flex;
+  flex-direction: column;
+}
+
+.source-chip {
+  border: 1px solid var(--border);
+  background: rgba(217, 79, 168, 0.06);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.source-chip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.source-preview {
+  margin-top: 0.4rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface, rgba(255, 255, 255, 0.6));
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 520px;
+  white-space: pre-wrap;
 }
 
 .chat-hint {

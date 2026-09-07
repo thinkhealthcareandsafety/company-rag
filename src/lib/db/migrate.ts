@@ -103,6 +103,17 @@ async function main() {
     `;
     await sql`CREATE INDEX IF NOT EXISTS chat_messages_conversation_id_idx ON chat_messages (conversation_id)`;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS error_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        message TEXT NOT NULL,
+        stack TEXT,
+        context JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS error_logs_created_at_idx ON error_logs (created_at)`;
+
     console.log("Schema is up to date.");
   } finally {
     await sql.end();

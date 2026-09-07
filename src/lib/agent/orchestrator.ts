@@ -1,5 +1,6 @@
 import type { Content, FunctionCall, Part } from "@google/genai";
 import { getGemini, CHAT_MODEL } from "@/lib/gemini";
+import { logError } from "@/lib/errorLog";
 import { toolDeclarations, executeTool } from "./tools";
 
 const MAX_ITERATIONS = 4;
@@ -24,7 +25,7 @@ Rules:
 export type AgentEvent =
   | { type: "token"; value: string }
   | { type: "tool_call"; name: string; args: unknown }
-  | { type: "tool_result"; name: string; ok: boolean }
+  | { type: "tool_result"; name: string; ok: boolean; result: unknown }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -68,7 +69,7 @@ export async function* runAgent(history: Content[]): AsyncGenerator<AgentEvent> 
             : { error: settled.reason instanceof Error ? settled.reason.message : "Tool call timed out or failed" };
 
         const errorMessage = (payload as { error?: string })?.error;
-        yield { type: "tool_result", name: fc.name!, ok: settled.status === "fulfilled" && !errorMessage };
+        yield { type: "tool_result", name: fc.name!, ok: settled.status === "fulfilled" && !errorMessage, result: payload };
 
         responseParts.push({
           functionResponse: {
@@ -100,7 +101,7 @@ export async function* runAgent(history: Content[]): AsyncGenerator<AgentEvent> 
     yield* streamTurn(gemini, contents, false);
     yield { type: "done" };
   } catch (err) {
-    console.error("Agent turn failed:", err);
+    await logError(err, { source: "agent_orchestrator" });
     yield { type: "error", message: toCleanErrorMessage(err) };
   }
 }

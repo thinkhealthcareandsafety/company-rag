@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TopNav } from "@/components/TopNav";
+import { PageLoader } from "@/components/Loader";
 
 interface DocumentRow {
   id: string;
@@ -18,7 +19,7 @@ const STATUS_COLOR: Record<DocumentRow["status"], string> = {
 };
 
 export function DocumentsPage() {
-  const [docs, setDocs] = useState<DocumentRow[]>([]);
+  const [docs, setDocs] = useState<DocumentRow[] | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,8 +84,12 @@ export function DocumentsPage() {
         {error && <p className="error-text">{error}</p>}
 
         <div className="card">
-          {docs.length === 0 && <p style={{ padding: "1rem", color: "var(--text-muted)" }}>No documents uploaded yet.</p>}
-          {docs.map((doc, i) => (
+          {docs === null ? (
+            <PageLoader />
+          ) : docs.length === 0 ? (
+            <p style={{ padding: "1rem", color: "var(--text-muted)" }}>No documents uploaded yet.</p>
+          ) : null}
+          {docs?.map((doc, i) => (
             <div
               key={doc.id}
               style={{

@@ -6,11 +6,20 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { TopNav } from "@/components/TopNav";
 import { ChatSidebar } from "@/components/Chat/ChatSidebar";
+import { PageLoader } from "@/components/Loader";
 import { SparkIcon, SendIcon } from "@/components/icons";
 
 interface ToolActivity {
   name: string;
   ok?: boolean;
+  result?: unknown;
+}
+
+interface DocumentSource {
+  document?: string;
+  page?: number;
+  heading?: string;
+  content?: string;
 }
 
 interface Message {
@@ -53,6 +62,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 860);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetch("/api/shortcuts")
@@ -85,25 +95,38 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
     return shortcuts.filter((s) => s.trigger.startsWith(query));
   }, [input, shortcuts]);
 
-  async function send(text: string) {
-    if (!text.trim() || busy) return;
+  async function send(text: string, options?: { regenerate?: boolean }) {
+    const regenerate = options?.regenerate ?? false;
+    if (busy) return;
+    if (!regenerate && !text.trim()) return;
 
     setError(null);
-    setInput("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    if (!regenerate) {
+      setInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+    }
 
     const wasNewConversation = !conversationId;
     let resolvedConversationId = conversationId;
 
-    const nextMessages: Message[] = [...messages, { role: "user", content: text }, { role: "assistant", content: "", tools: [] }];
-    setMessages(nextMessages);
+    if (regenerate) {
+      // Drop the previous assistant reply and re-run from the same history —
+      // the server does the equivalent delete against its own copy.
+      setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: "", tools: [] }]);
+    } else {
+      setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "", tools: [] }]);
+    }
     setBusy(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, message: text }),
+        body: JSON.stringify(regenerate ? { conversationId, regenerate: true } : { conversationId, message: text }),
+        signal: controller.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -129,7 +152,9 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
           } else if (event === "tool_result") {
             updated[updated.length - 1] = {
               ...last,
-              tools: (last.tools ?? []).map((t) => (t.name === data.name ? { ...t, ok: data.ok as boolean } : t)),
+              tools: (last.tools ?? []).map((t) =>
+                t.name === data.name ? { ...t, ok: data.ok as boolean, result: data.result } : t,
+              ),
             };
           } else if (event === "error") {
             setError(data.message as string);
@@ -139,9 +164,14 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // user-initiated stop — leave whatever partial content already streamed in
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      }
     } finally {
       setBusy(false);
+      abortRef.current = null;
     }
 
     // Defer the URL change until the response has fully streamed in — doing
@@ -150,6 +180,10 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
     if (wasNewConversation && resolvedConversationId) {
       router.replace(`/c/${resolvedConversationId}`, { scroll: false });
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
   }
 
   function pickShortcut(shortcut: Shortcut) {
@@ -210,7 +244,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
       <div className="chat-page-root">
         <TopNav onToggleSidebar={() => setSidebarOpen((o) => !o)} />
         <div className="chat-shell">
-          {loadingHistory ? null : messages.length === 0 ? (
+          {loadingHistory ? <PageLoader label="Loading conversation…" /> : messages.length === 0 ? (
             <div className="chat-empty">
               <div className="chat-empty-mark">
                 <SparkIcon />
@@ -259,9 +293,17 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
                             <span />
                           </div>
                         ) : (
-                          <div className="chat-markdown">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                          </div>
+                          <>
+                            <div className="chat-markdown">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                            </div>
+                            <SourceCitations tools={m.tools} />
+                            {!busy && i === messages.length - 1 && m.content && (
+                              <button type="button" className="regen-btn" onClick={() => send("", { regenerate: true })}>
+                                ↻ Regenerate
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -300,14 +342,42 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
                 disabled={busy}
                 rows={1}
               />
-              <button type="submit" className="chat-send-btn" disabled={busy || !input.trim()} aria-label="Send">
-                <SendIcon />
-              </button>
+              {busy ? (
+                <button type="button" className="chat-send-btn chat-stop-btn" onClick={stop} aria-label="Stop generating">
+                  <span className="stop-square" />
+                </button>
+              ) : (
+                <button type="submit" className="chat-send-btn" disabled={!input.trim()} aria-label="Send">
+                  <SendIcon />
+                </button>
+              )}
             </form>
             <p className="chat-hint">Answers may combine internal documents and live CRM data — verify anything critical.</p>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SourceCitations({ tools }: { tools?: ToolActivity[] }) {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const docTool = tools?.find((t) => t.name === "search_documents" && t.ok && t.result);
+  const payload = docTool?.result as { results?: DocumentSource[] } | undefined;
+  const sources = Array.isArray(payload?.results) ? payload.results : [];
+  if (sources.length === 0) return null;
+
+  return (
+    <div className="source-citations">
+      {sources.map((s, i) => (
+        <div key={i} className="source-citation">
+          <button type="button" className="source-chip" onClick={() => setOpenIndex(openIndex === i ? null : i)}>
+            📄 {s.document ?? "Document"}
+            {s.page ? ` · p.${s.page}` : ""}
+          </button>
+          {openIndex === i && s.content && <div className="source-preview">{s.content}</div>}
+        </div>
+      ))}
     </div>
   );
 }

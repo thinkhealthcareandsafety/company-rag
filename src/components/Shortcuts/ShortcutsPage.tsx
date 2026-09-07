@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TopNav } from "@/components/TopNav";
+import { PageLoader } from "@/components/Loader";
 
 interface Shortcut {
   id: string;
@@ -10,7 +11,7 @@ interface Shortcut {
 }
 
 export function ShortcutsPage() {
-  const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
+  const [shortcuts, setShortcuts] = useState<Shortcut[] | null>(null);
   const [trigger, setTrigger] = useState("");
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -98,8 +99,12 @@ export function ShortcutsPage() {
         </form>
 
         <div className="card">
-          {shortcuts.length === 0 && <p style={{ padding: "1rem", color: "var(--text-muted)" }}>No shortcuts yet.</p>}
-          {shortcuts.map((s, i) => (
+          {shortcuts === null ? (
+            <PageLoader />
+          ) : shortcuts.length === 0 ? (
+            <p style={{ padding: "1rem", color: "var(--text-muted)" }}>No shortcuts yet.</p>
+          ) : null}
+          {shortcuts?.map((s, i) => (
             <div
               key={s.id}
               style={{

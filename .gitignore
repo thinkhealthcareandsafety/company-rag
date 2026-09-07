@@ -7,3 +7,5 @@ out/
 .DS_Store
 next-env.d.ts
 *.tsbuildinfo
+.sentryclirc
+.env.sentry-build-plugin

@@ -24,6 +24,8 @@ export function TopNav({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
         <Link href="/">Chat</Link>
         <Link href="/documents">Documents</Link>
         <Link href="/shortcuts">Shortcuts</Link>
+        <Link href="/team">Team</Link>
+        <Link href="/errors">Errors</Link>
         {session?.user?.email && <span className="nav-email">{session.user.email}</span>}
         <button className="btn" onClick={() => signOut({ callbackUrl: "/login" })}>
           Sign out
