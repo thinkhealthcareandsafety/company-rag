@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { SidebarHeader, SidebarNavLinks, SidebarFooter } from "@/components/Sidebar/SidebarChrome";
 
 interface ConversationSummary {
   id: string;
@@ -43,9 +44,10 @@ export function ChatSidebar({ activeId, open, onClose }: { activeId?: string; op
 
   return (
     <>
-      {open && <div className="sidebar-backdrop" onClick={onClose} />}
+      {open && <div className="sidebar-backdrop chat-sidebar-backdrop" onClick={onClose} />}
       <aside className={`chat-sidebar ${open ? "open" : ""}`}>
         <div className="chat-sidebar-inner">
+          <SidebarHeader onClose={onClose} />
           <Link href="/" className="new-chat-btn" onClick={closeOnMobile}>
             + New chat
           </Link>
@@ -69,6 +71,9 @@ export function ChatSidebar({ activeId, open, onClose }: { activeId?: string; op
               </Link>
             ))}
           </div>
+          <div className="sidebar-divider" />
+          <SidebarNavLinks onNavigate={closeOnMobile} />
+          <SidebarFooter />
         </div>
       </aside>
     </>

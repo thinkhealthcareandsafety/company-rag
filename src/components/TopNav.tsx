@@ -1,19 +1,18 @@
 "use client";
 
-import Link from "next/link";
-import { signOut, useSession } from "next-auth/react";
 import { SparkIcon, MenuIcon } from "@/components/icons";
+import { SimpleNavDrawer } from "@/components/Sidebar/SimpleNavDrawer";
 
 export function TopNav({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
-  const { data: session } = useSession();
-
   return (
     <header className="top-nav">
       <span className="brand">
-        {onToggleSidebar && (
+        {onToggleSidebar ? (
           <button type="button" className="sidebar-toggle-btn" onClick={onToggleSidebar} aria-label="Toggle sidebar">
             <MenuIcon />
           </button>
+        ) : (
+          <SimpleNavDrawer />
         )}
         <span className="brand-mark">
           <SparkIcon />
@@ -23,18 +22,6 @@ export function TopNav({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
           <span className="brand-name-short">THS</span>
         </span>
       </span>
-      <nav>
-        <Link href="/">Chat</Link>
-        <Link href="/digest">Digest</Link>
-        <Link href="/documents">Documents</Link>
-        <Link href="/shortcuts">Shortcuts</Link>
-        <Link href="/team">Team</Link>
-        <Link href="/errors">Errors</Link>
-        {session?.user?.email && <span className="nav-email">{session.user.email}</span>}
-        <button className="btn" onClick={() => signOut({ callbackUrl: "/login" })}>
-          Sign out
-        </button>
-      </nav>
     </header>
   );
 }

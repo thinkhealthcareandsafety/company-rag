@@ -153,31 +153,12 @@ button {
   }
 }
 
-.top-nav nav {
-  display: flex;
-  gap: 0.25rem;
-  align-items: center;
-}
-
-.top-nav nav a {
-  color: var(--text-muted);
-  text-decoration: none;
-  font-size: 0.85rem;
-  font-weight: 500;
-  padding: 0.4rem 0.75rem;
-  border-radius: var(--radius-full);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.top-nav nav a:hover {
-  color: var(--text);
-  background: var(--surface-hover);
-}
-
 .nav-email {
   color: var(--text-faint);
-  font-size: 0.8rem;
-  margin: 0 0.25rem;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* One button family, two variants: .btn (secondary/ghost) and .btn.btn-primary
@@ -430,13 +411,17 @@ button {
   padding: 0.85rem 0.75rem;
 }
 
-/* Desktop: a fixed pane in the layout flow, collapsible in place. */
+/* Desktop: the chat page's own sidebar becomes a fixed pane in the layout
+   flow, collapsible in place — it lives inside chat-page-root-row, which has
+   room for it to push content rather than overlay it. Pages without that
+   flex layout (everything except chat) use .simple-drawer instead, which
+   stays an overlay at every width — see the override below. */
 @media (min-width: 860px) {
-  .sidebar-backdrop {
+  .chat-sidebar-backdrop {
     display: none;
   }
 
-  .chat-sidebar {
+  .chat-sidebar:not(.simple-drawer) {
     position: relative;
     inset: auto;
     width: 260px;
@@ -447,12 +432,12 @@ button {
     background: var(--glass);
   }
 
-  .chat-sidebar:not(.open) {
+  .chat-sidebar:not(.simple-drawer):not(.open) {
     width: 0;
     border-right-color: transparent;
   }
 
-  .chat-sidebar-inner {
+  .chat-sidebar:not(.simple-drawer) .chat-sidebar-inner {
     width: 260px;
     max-width: none;
   }
@@ -532,6 +517,49 @@ button {
 
 .chat-sidebar-item:hover .chat-sidebar-delete {
   display: flex;
+}
+
+.sidebar-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.15rem 0.15rem 0.5rem;
+  flex-shrink: 0;
+}
+
+.sidebar-drawer-header .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0.4rem 0;
+  flex-shrink: 0;
+}
+
+.sidebar-nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex-shrink: 0;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  margin-top: auto;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .chat-sidebar-delete:hover {
