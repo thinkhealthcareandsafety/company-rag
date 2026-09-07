@@ -2,14 +2,19 @@
 
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { SparkIcon } from "@/components/icons";
+import { SparkIcon, MenuIcon } from "@/components/icons";
 
-export function TopNav() {
+export function TopNav({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const { data: session } = useSession();
 
   return (
     <header className="top-nav">
       <span className="brand">
+        {onToggleSidebar && (
+          <button type="button" className="sidebar-toggle-btn" onClick={onToggleSidebar} aria-label="Toggle sidebar">
+            <MenuIcon />
+          </button>
+        )}
         <span className="brand-mark">
           <SparkIcon />
         </span>

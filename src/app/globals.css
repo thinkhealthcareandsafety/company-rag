@@ -292,6 +292,7 @@ button {
 .chat-page-root-row {
   height: 100vh;
   display: flex;
+  position: relative;
 }
 
 .chat-page-root {
@@ -302,19 +303,96 @@ button {
   flex-direction: column;
 }
 
-.chat-sidebar {
-  width: 260px;
+.sidebar-toggle-btn {
   flex-shrink: 0;
-  height: 100vh;
+  width: 30px;
+  height: 30px;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.85rem 0.75rem;
-  background: var(--glass);
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  margin-right: 0.1rem;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(20, 21, 26, 0.06);
+  color: var(--text);
+}
+
+.sidebar-toggle-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 21, 26, 0.35);
+  z-index: 25;
+}
+
+/* Mobile-first: the sidebar is a hidden overlay drawer by default. Width
+   lives on the fixed-size inner wrapper so its contents never reflow/wrap
+   while the outer element's width transitions on desktop (below) — the
+   outer element just clips via overflow: hidden. */
+.chat-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 280px;
+  max-width: 82vw;
+  transform: translateX(-100%);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 30;
+  background: var(--glass-strong);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border-right: 1px solid var(--glass-border);
   overflow: hidden;
+}
+
+.chat-sidebar.open {
+  transform: translateX(0);
+}
+
+.chat-sidebar-inner {
+  width: 280px;
+  max-width: 82vw;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 0.75rem;
+}
+
+/* Desktop: a fixed pane in the layout flow, collapsible in place. */
+@media (min-width: 860px) {
+  .sidebar-backdrop {
+    display: none;
+  }
+
+  .chat-sidebar {
+    position: relative;
+    inset: auto;
+    width: 260px;
+    max-width: none;
+    height: 100vh;
+    transform: none;
+    transition: width 0.2s ease, border-color 0.2s ease;
+    background: var(--glass);
+  }
+
+  .chat-sidebar:not(.open) {
+    width: 0;
+    border-right-color: transparent;
+  }
+
+  .chat-sidebar-inner {
+    width: 260px;
+    max-width: none;
+  }
 }
 
 .new-chat-btn {

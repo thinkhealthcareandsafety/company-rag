@@ -46,6 +46,11 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   const [error, setError] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // Lazy-initialized from viewport width so desktop starts open and mobile
+  // starts closed (an overlay drawer there) without a post-mount effect —
+  // `window` is guarded for the SSR pass, which always renders "closed" and
+  // is corrected the moment this client component actually mounts.
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 860);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -201,9 +206,9 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
 
   return (
     <div className="chat-page-root-row">
-      <ChatSidebar activeId={conversationId} />
+      <ChatSidebar activeId={conversationId} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="chat-page-root">
-        <TopNav />
+        <TopNav onToggleSidebar={() => setSidebarOpen((o) => !o)} />
         <div className="chat-shell">
           {loadingHistory ? null : messages.length === 0 ? (
             <div className="chat-empty">
