@@ -20,7 +20,7 @@ export function SendIcon() {
       <path
         d="M12 19V5M12 5L5.5 11.5M12 5L18.5 11.5"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
