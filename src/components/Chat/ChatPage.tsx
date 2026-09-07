@@ -249,10 +249,10 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
               <div className="chat-empty-mark">
                 <SparkIcon />
               </div>
-              <h1>Ask about your documents or live CRM data</h1>
+              <h1>Welcome to Think Healthcare &amp; Safety AI</h1>
               <p>
-                Questions can pull from ingested policy documents, live Zoho CRM records, or both combined into one
-                answer.
+                Ask about your policy documents, live Zoho CRM records, or Zoho Books data — or combine all three in
+                one question.
               </p>
               <div className="chat-suggestions">
                 {SAMPLE_QUESTIONS.map((q) => (

@@ -7,8 +7,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Company RAG",
-  description: "Unified search over documents and live CRM data",
+  title: "Think Healthcare & Safety",
+  description: "AI assistant for Think Healthcare & Safety — documents, live CRM, and Books data in one place",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

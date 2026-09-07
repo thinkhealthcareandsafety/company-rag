@@ -18,7 +18,10 @@ export function TopNav({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
         <span className="brand-mark">
           <SparkIcon />
         </span>
-        Company RAG
+        <span className="brand-name" title="Think Healthcare & Safety">
+          <span className="brand-name-full">Think Healthcare &amp; Safety</span>
+          <span className="brand-name-short">THS</span>
+        </span>
       </span>
       <nav>
         <Link href="/">Chat</Link>

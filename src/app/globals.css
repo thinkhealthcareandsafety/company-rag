@@ -126,6 +126,24 @@ button {
   color: #fff;
 }
 
+.brand-name-short {
+  display: inline;
+}
+
+.brand-name-full {
+  display: none;
+}
+
+@media (min-width: 720px) {
+  .brand-name-short {
+    display: none;
+  }
+
+  .brand-name-full {
+    display: inline;
+  }
+}
+
 .top-nav nav {
   display: flex;
   gap: 0.25rem;

@@ -35,7 +35,7 @@ export default function LoginPage() {
           <SparkIcon />
         </div>
         <h1>Welcome back</h1>
-        <p className="auth-subtitle">Sign in to Company RAG</p>
+        <p className="auth-subtitle">Sign in to Think Healthcare &amp; Safety</p>
         {error && <p className="error-text">{error}</p>}
         <div className="field">
           <label htmlFor="email">Email</label>
