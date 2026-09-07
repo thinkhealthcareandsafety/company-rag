@@ -143,6 +143,21 @@ export function DigestPage() {
               <p className="error-text">Some sections couldn&rsquo;t load: {digest.errors.join("; ")}</p>
             )}
 
+            {digest.narrative && (
+              <p
+                style={{
+                  fontSize: "1.05rem",
+                  fontWeight: 600,
+                  lineHeight: 1.5,
+                  margin: "0 0 1.25rem",
+                  paddingLeft: "0.9rem",
+                  borderLeft: "3px solid var(--accent)",
+                }}
+              >
+                {digest.narrative}
+              </p>
+            )}
+
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.85rem", marginBottom: "2rem" }}>
               <StatCard
                 label="Overdue invoices"

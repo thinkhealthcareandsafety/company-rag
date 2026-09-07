@@ -1,8 +1,10 @@
+import { getGemini, CHAT_MODEL } from "@/lib/gemini";
 import { listBooksRecords } from "@/lib/crm/zohoBooksClient";
 import { listInventoryRecords } from "@/lib/crm/zohoInventoryClient";
 import { queryRecords } from "@/lib/crm/zohoClient";
 
 const STALE_DEAL_DAYS = 14;
+const TOP_DRIVERS_COUNT = 3;
 
 export interface DigestOverdueInvoice {
   id: string;
@@ -31,10 +33,74 @@ export interface DigestStaleDeal {
 
 export interface Digest {
   generatedAt: string;
+  narrative: string | null;
   overdueInvoices: { items: DigestOverdueInvoice[]; totalBalance: { currencyCode: string; sum: number; count: number }[] };
   lowStockItems: DigestLowStockItem[];
   staleDeals: DigestStaleDeal[];
   errors: string[];
+}
+
+function topOverdueCustomers(invoices: DigestOverdueInvoice[]): { name: string; currencyCode: string; total: number }[] {
+  const totals = new Map<string, { name: string; currencyCode: string; total: number }>();
+
+  for (const inv of invoices) {
+    const name = typeof inv.customerName === "string" ? inv.customerName : "Unknown customer";
+    const currencyCode = typeof inv.currencyCode === "string" ? inv.currencyCode : "";
+    const balance = Number(inv.balance);
+    if (Number.isNaN(balance)) continue;
+
+    const key = `${name}|${currencyCode}`;
+    const existing = totals.get(key) ?? { name, currencyCode, total: 0 };
+    existing.total += balance;
+    totals.set(key, existing);
+  }
+
+  return [...totals.values()].sort((a, b) => b.total - a.total).slice(0, TOP_DRIVERS_COUNT);
+}
+
+/**
+ * One plain-English sentence summarizing what needs attention most — the
+ * only AI-generated part of the digest. Given ONLY the already-computed
+ * exact numbers (never raw record data) and told explicitly not to invent
+ * figures, so it can phrase a takeaway without being trusted to do any of
+ * the actual math itself. Best-effort: a failure here just omits the
+ * sentence, it never blocks the rest of the (fully deterministic) digest.
+ */
+async function buildNarrative(digest: Omit<Digest, "narrative">): Promise<string | null> {
+  const facts = {
+    overdueInvoiceCount: digest.overdueInvoices.items.length,
+    overdueTotals: digest.overdueInvoices.totalBalance,
+    topOverdueCustomers: topOverdueCustomers(digest.overdueInvoices.items),
+    lowStockItemCount: digest.lowStockItems.length,
+    staleDealCount: digest.staleDeals.length,
+    staleDealDaysThreshold: STALE_DEAL_DAYS,
+  };
+
+  // Nothing to summarize — every section is clean.
+  if (facts.overdueInvoiceCount === 0 && facts.lowStockItemCount === 0 && facts.staleDealCount === 0) {
+    return "Everything looks clean today — no overdue invoices, low stock, or stale deals.";
+  }
+
+  try {
+    const res = await getGemini().models.generateContent({
+      model: CHAT_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Write exactly ONE plain-English sentence (max 25 words, no markdown) summarizing what most needs attention today, based ONLY on these exact numbers — never invent or estimate a number not given here:\n${JSON.stringify(facts)}`,
+            },
+          ],
+        },
+      ],
+    });
+    const text = res.text?.trim();
+    return text || null;
+  } catch {
+    // Best-effort — the numeric digest above is unaffected either way.
+    return null;
+  }
 }
 
 /**
@@ -66,7 +132,7 @@ export async function buildDigest(): Promise<Digest> {
     return { records: [], moreRecords: false, amountSum: undefined };
   });
 
-  return {
+  const digestWithoutNarrative = {
     generatedAt: new Date().toISOString(),
     overdueInvoices: {
       items: overdueInvoices.records.map((r) => ({
@@ -96,4 +162,6 @@ export async function buildDigest(): Promise<Digest> {
     })),
     errors,
   };
+
+  return { ...digestWithoutNarrative, narrative: await buildNarrative(digestWithoutNarrative) };
 }
