@@ -73,7 +73,16 @@ export const crmEntityIndex = pgTable(
   (table) => [index("crm_entity_index_search_tokens_idx").on(table.searchTokens)],
 );
 
+export const promptShortcuts = pgTable("prompt_shortcuts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  trigger: varchar("trigger", { length: 40 }).notNull().unique(), // stored lowercase, no leading slash
+  prompt: text("prompt").notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type DocumentChunk = typeof documentChunks.$inferSelect;
 export type CrmEntity = typeof crmEntityIndex.$inferSelect;
+export type PromptShortcut = typeof promptShortcuts.$inferSelect;

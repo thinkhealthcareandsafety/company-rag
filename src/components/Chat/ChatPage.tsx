@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { TopNav } from "@/components/TopNav";
@@ -15,6 +15,12 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   tools?: ToolActivity[];
+}
+
+interface Shortcut {
+  id: string;
+  trigger: string;
+  prompt: string;
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -33,8 +39,26 @@ export function ChatPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    fetch("/api/shortcuts")
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setShortcuts)
+      .catch(() => {});
+  }, []);
+
+  // Only offer shortcuts while the whole input is still a bare "/trigger" —
+  // once a space is typed the user is writing a real message that happens to
+  // start with "/", not picking a shortcut.
+  const slashMatches = useMemo(() => {
+    if (!input.startsWith("/") || input.includes(" ")) return [];
+    const query = input.slice(1).toLowerCase();
+    return shortcuts.filter((s) => s.trigger.startsWith(query));
+  }, [input, shortcuts]);
 
   async function send(text: string) {
     if (!text.trim() || busy) return;
@@ -87,20 +111,51 @@ export function ChatPage() {
     }
   }
 
+  function pickShortcut(shortcut: Shortcut) {
+    setInput("");
+    send(shortcut.prompt);
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (slashMatches.length > 0) {
+      pickShortcut(slashMatches[selectedIndex] ?? slashMatches[0]!);
+      return;
+    }
     send(input);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (slashMatches.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((i) => (i + 1) % slashMatches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setInput("");
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      if (slashMatches.length > 0) {
+        pickShortcut(slashMatches[selectedIndex] ?? slashMatches[0]!);
+        return;
+      }
       send(input);
     }
   }
 
   function autoResize(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInput(e.target.value);
+    setSelectedIndex(0);
     e.target.style.height = "auto";
     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
   }
@@ -176,13 +231,29 @@ export function ChatPage() {
         )}
 
         <div className="chat-composer-wrap">
+          {slashMatches.length > 0 && (
+            <div className="shortcut-dropdown">
+              {slashMatches.map((s, i) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`shortcut-item ${i === selectedIndex ? "active" : ""}`}
+                  onMouseEnter={() => setSelectedIndex(i)}
+                  onClick={() => pickShortcut(s)}
+                >
+                  <span className="shortcut-trigger">/{s.trigger}</span>
+                  <span className="shortcut-preview">{s.prompt}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="chat-composer">
             <textarea
               ref={textareaRef}
               value={input}
               onChange={autoResize}
               onKeyDown={handleKeyDown}
-              placeholder="Ask a question…"
+              placeholder="Ask a question, or type / for a saved shortcut…"
               disabled={busy}
               rows={1}
             />

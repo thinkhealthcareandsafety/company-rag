@@ -3,5 +3,5 @@ import authMiddleware from "next-auth/middleware";
 export default authMiddleware;
 
 export const config = {
-  matcher: ["/", "/documents/:path*"],
+  matcher: ["/", "/documents/:path*", "/shortcuts/:path*"],
 };

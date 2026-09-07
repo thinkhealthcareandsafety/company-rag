@@ -662,6 +662,51 @@ button {
   z-index: -1;
 }
 
+.shortcut-dropdown {
+  max-width: 760px;
+  margin: 0 auto 0.5rem;
+  background: var(--glass-strong);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  font-size: 0.86rem;
+  color: var(--text);
+}
+
+.shortcut-item.active {
+  background: rgba(217, 79, 168, 0.1);
+}
+
+.shortcut-trigger {
+  flex-shrink: 0;
+  font-weight: 650;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--accent);
+}
+
+.shortcut-preview {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-composer {
   max-width: 760px;
   margin: 0 auto;

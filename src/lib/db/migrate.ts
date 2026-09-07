@@ -70,6 +70,16 @@ async function main() {
     `;
     await sql`CREATE INDEX IF NOT EXISTS crm_entity_index_search_tokens_idx ON crm_entity_index (search_tokens)`;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS prompt_shortcuts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        trigger VARCHAR(40) NOT NULL UNIQUE,
+        prompt TEXT NOT NULL,
+        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+
     console.log("Schema is up to date.");
   } finally {
     await sql.end();
