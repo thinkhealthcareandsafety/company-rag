@@ -80,6 +80,29 @@ async function main() {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS conversations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL DEFAULT 'New chat',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS conversations_user_id_idx ON conversations (user_id)`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        role VARCHAR(20) NOT NULL,
+        content TEXT NOT NULL,
+        tools JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS chat_messages_conversation_id_idx ON chat_messages (conversation_id)`;
+
     console.log("Schema is up to date.");
   } finally {
     await sql.end();

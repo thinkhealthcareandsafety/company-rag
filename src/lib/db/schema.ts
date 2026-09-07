@@ -81,8 +81,40 @@ export const promptShortcuts = pgTable("prompt_shortcuts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("New chat"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("conversations_user_id_idx").on(table.userId)],
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 20 }).notNull(), // user | assistant
+    content: text("content").notNull(),
+    // Assistant messages only: [{ name, ok }] — which tools ran, for redisplay on reload.
+    tools: jsonb("tools"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("chat_messages_conversation_id_idx").on(table.conversationId)],
+);
+
 export type User = typeof users.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type DocumentChunk = typeof documentChunks.$inferSelect;
 export type CrmEntity = typeof crmEntityIndex.$inferSelect;
 export type PromptShortcut = typeof promptShortcuts.$inferSelect;
+export type Conversation = typeof conversations.$inferSelect;
+export type ChatMessageRow = typeof chatMessages.$inferSelect;
