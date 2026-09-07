@@ -110,27 +110,35 @@ async function buildNarrative(digest: Omit<Digest, "narrative">): Promise<string
  * look at. Each section fails independently (one Zoho hiccup shouldn't blank
  * the whole digest) and gets logged into `errors` instead of throwing.
  */
-export async function buildDigest(): Promise<Digest> {
+async function fetchDigest(): Promise<Digest> {
   const errors: string[] = [];
 
-  const overdueInvoices = await listBooksRecords("invoices", { status: "overdue" }).catch((err) => {
-    errors.push(`Overdue invoices: ${err instanceof Error ? err.message : "failed"}`);
-    return { records: [], hasMorePage: false, amountSummary: undefined };
-  });
-
-  const items = await listInventoryRecords("items", {}).catch((err) => {
-    errors.push(`Inventory items: ${err instanceof Error ? err.message : "failed"}`);
-    return { records: [], hasMorePage: false };
-  });
-
   const cutoff = new Date(Date.now() - STALE_DEAL_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + "+00:00";
-  const staleDealsResult = await queryRecords(
-    "Deals",
-    `select id, Deal_Name, Amount, Stage, Modified_Time from Deals where Modified_Time < '${cutoff}' and Stage not in ('Closed Won', 'Closed Lost') order by Modified_Time asc limit 20`,
-  ).catch((err) => {
-    errors.push(`Stale deals: ${err instanceof Error ? err.message : "failed"}`);
-    return { records: [], moreRecords: false, amountSum: undefined };
-  });
+
+  // These three hit three independent Zoho products (Books, Inventory, CRM)
+  // — nothing here depends on another's result, so fetching them one after
+  // another was pure wasted latency. Run concurrently instead. Inventory in
+  // particular pages through the full item catalog to check every item's
+  // stock level (Zoho has no server-side "low stock only" filter), which is
+  // the main remaining cost — see buildDigest's cache below for how that's
+  // kept off the hot path for repeat page visits.
+  const [overdueInvoices, items, staleDealsResult] = await Promise.all([
+    listBooksRecords("invoices", { status: "overdue" }).catch((err) => {
+      errors.push(`Overdue invoices: ${err instanceof Error ? err.message : "failed"}`);
+      return { records: [], hasMorePage: false, amountSummary: undefined };
+    }),
+    listInventoryRecords("items", {}).catch((err) => {
+      errors.push(`Inventory items: ${err instanceof Error ? err.message : "failed"}`);
+      return { records: [], hasMorePage: false };
+    }),
+    queryRecords(
+      "Deals",
+      `select id, Deal_Name, Amount, Stage, Modified_Time from Deals where Modified_Time < '${cutoff}' and Stage not in ('Closed Won', 'Closed Lost') order by Modified_Time asc limit 20`,
+    ).catch((err) => {
+      errors.push(`Stale deals: ${err instanceof Error ? err.message : "failed"}`);
+      return { records: [], moreRecords: false, amountSum: undefined };
+    }),
+  ]);
 
   const digestWithoutNarrative = {
     generatedAt: new Date().toISOString(),
@@ -164,4 +172,26 @@ export async function buildDigest(): Promise<Digest> {
   };
 
   return { ...digestWithoutNarrative, narrative: await buildNarrative(digestWithoutNarrative) };
+}
+
+const CACHE_TTL_MS = 2 * 60 * 1000;
+let cache: { data: Digest; expiresAt: number } | undefined;
+
+/**
+ * Every field here is live Zoho data, but "live" doesn't have to mean
+ * "re-fetched on every single page open" — the full build takes a few
+ * seconds (mostly paging through the Inventory catalog to check stock
+ * levels, since Zoho has no server-side "low stock only" filter). Caching
+ * for a couple of minutes means only the first visit (or an explicit
+ * Refresh) pays that cost; anyone else opening the page in that window gets
+ * an instant response that's still at most 2 minutes stale.
+ */
+export async function buildDigest(forceRefresh = false): Promise<Digest> {
+  if (!forceRefresh && cache && cache.expiresAt > Date.now()) {
+    return cache.data;
+  }
+
+  const data = await fetchDigest();
+  cache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
+  return data;
 }

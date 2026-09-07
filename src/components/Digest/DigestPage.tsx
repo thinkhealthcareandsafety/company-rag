@@ -194,10 +194,10 @@ export function DigestPage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (forceRefresh = false) => {
     setError(null);
     try {
-      const res = await fetch("/api/digest");
+      const res = await fetch(forceRefresh ? "/api/digest?refresh=1" : "/api/digest");
       if (!res.ok) throw new Error("Failed to load digest");
       setDigest(await res.json());
     } catch (err) {
@@ -214,7 +214,7 @@ export function DigestPage() {
 
   async function handleRefresh() {
     setRefreshing(true);
-    await refresh();
+    await refresh(true);
     setRefreshing(false);
   }
 
