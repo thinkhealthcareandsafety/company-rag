@@ -81,19 +81,35 @@ export interface ListInventoryRecordsResult {
   hasMorePage: boolean;
 }
 
+// See the identical constant/comment in zohoBooksClient.ts — Zoho caps a
+// single page at 200 regardless of what's requested, so a naive single-page
+// fetch would silently undercount a "how much total stock" style question.
+const MAX_AUTO_PAGES = 5;
+
 export async function listInventoryRecords(module: string, params: Record<string, string> = {}): Promise<ListInventoryRecordsResult> {
   if (!SINGULAR[module]) throw new ZohoApiError(`Unknown Zoho Inventory module: ${module}`);
 
-  const query = new URLSearchParams({
-    organization_id: getZohoBooksEnv().ZOHO_BOOKS_ORGANIZATION_ID,
-    ...params,
-  });
+  const allRecords: ZohoRecord[] = [];
+  let hasMorePage = false;
 
-  const data = await zohoRequestTo<Record<string, unknown>>(inventoryApiBaseUrl(), `${module}?${query.toString()}`);
-  const records = ((data[module] as ZohoRecord[] | undefined) ?? []).map((r) => trimRecord(module, r));
-  const pageContext = data.page_context as { has_more_page?: boolean } | undefined;
+  for (let page = 1; page <= MAX_AUTO_PAGES; page++) {
+    const query = new URLSearchParams({
+      organization_id: getZohoBooksEnv().ZOHO_BOOKS_ORGANIZATION_ID,
+      per_page: "200",
+      page: String(page),
+      ...params,
+    });
 
-  return { records, hasMorePage: pageContext?.has_more_page ?? false };
+    const data = await zohoRequestTo<Record<string, unknown>>(inventoryApiBaseUrl(), `${module}?${query.toString()}`);
+    const records = (data[module] as ZohoRecord[] | undefined) ?? [];
+    allRecords.push(...records.map((r) => trimRecord(module, r)));
+
+    const pageContext = data.page_context as { has_more_page?: boolean } | undefined;
+    hasMorePage = pageContext?.has_more_page ?? false;
+    if (!hasMorePage || records.length === 0) break;
+  }
+
+  return { records: allRecords, hasMorePage };
 }
 
 export async function getInventoryRecord(module: string, recordId: string): Promise<ZohoRecord> {

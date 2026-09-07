@@ -120,28 +120,78 @@ function booksApiBaseUrl(): string {
 export interface ListBooksRecordsResult {
   records: ZohoRecord[];
   hasMorePage: boolean;
+  // Exact server-computed sums per currency, when records carry a numeric
+  // total/amount field — an LLM manually adding up dozens/hundreds of line
+  // items is a real source of wrong totals, so this is computed here instead
+  // of being left as arithmetic for the model to (maybe) get right.
+  amountSummary?: { currencyCode: string; sum: number; count: number }[];
 }
+
+function summarizeAmounts(records: ZohoRecord[]): ListBooksRecordsResult["amountSummary"] {
+  const totals = new Map<string, { sum: number; count: number }>();
+
+  for (const record of records) {
+    const raw = record.total ?? record.amount ?? record.bcy_total;
+    const amount = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    if (Number.isNaN(amount)) continue;
+
+    const currency = typeof record.currency_code === "string" ? record.currency_code : "unknown";
+    const existing = totals.get(currency) ?? { sum: 0, count: 0 };
+    existing.sum += amount;
+    existing.count += 1;
+    totals.set(currency, existing);
+  }
+
+  if (totals.size === 0) return undefined;
+  return [...totals.entries()].map(([currencyCode, { sum, count }]) => ({
+    currencyCode,
+    sum: Math.round(sum * 100) / 100,
+    count,
+  }));
+}
+
+// Zoho hard-caps a single page at 200 records regardless of what's
+// requested, so a naive single-page fetch silently undercounts anything
+// asking for a total/sum over a busier period. Auto-paginate up to this many
+// pages (1,000 records) before giving up and reporting hasMorePage — enough
+// for a realistic month of transactions at this business's scale, while
+// keeping worst-case latency bounded (each page is a sequential round trip,
+// and the agent's tool-call timeout has to cover the whole fetch).
+const MAX_AUTO_PAGES = 5;
 
 /**
  * Lists/filters records in one Books module. `params` are passed straight
  * through as query params — Zoho Books uses simple filters per module
  * (e.g. status=unpaid, date_start=, date_end=, customer_id=) rather than a
  * query language like CRM's COQL, so the agent supplies whichever filter
- * keys are relevant to the question.
+ * keys are relevant to the question. Auto-paginates internally (see
+ * MAX_AUTO_PAGES) so the agent gets a complete result set for anything
+ * within that bound, rather than having to reason about pages itself.
  */
 export async function listBooksRecords(module: string, params: Record<string, string> = {}): Promise<ListBooksRecordsResult> {
   if (!SINGULAR[module]) throw new ZohoApiError(`Unknown Zoho Books module: ${module}`);
 
-  const query = new URLSearchParams({
-    organization_id: getZohoBooksEnv().ZOHO_BOOKS_ORGANIZATION_ID,
-    ...params,
-  });
+  const allRecords: ZohoRecord[] = [];
+  let hasMorePage = false;
 
-  const data = await zohoRequestTo<Record<string, unknown>>(booksApiBaseUrl(), `${module}?${query.toString()}`);
-  const records = ((data[module] as ZohoRecord[] | undefined) ?? []).map((r) => trimRecord(module, r));
-  const pageContext = data.page_context as { has_more_page?: boolean } | undefined;
+  for (let page = 1; page <= MAX_AUTO_PAGES; page++) {
+    const query = new URLSearchParams({
+      organization_id: getZohoBooksEnv().ZOHO_BOOKS_ORGANIZATION_ID,
+      per_page: "200",
+      page: String(page),
+      ...params,
+    });
 
-  return { records, hasMorePage: pageContext?.has_more_page ?? false };
+    const data = await zohoRequestTo<Record<string, unknown>>(booksApiBaseUrl(), `${module}?${query.toString()}`);
+    const records = (data[module] as ZohoRecord[] | undefined) ?? [];
+    allRecords.push(...records.map((r) => trimRecord(module, r)));
+
+    const pageContext = data.page_context as { has_more_page?: boolean } | undefined;
+    hasMorePage = pageContext?.has_more_page ?? false;
+    if (!hasMorePage || records.length === 0) break;
+  }
+
+  return { records: allRecords, hasMorePage, amountSummary: summarizeAmounts(allRecords) };
 }
 
 export async function getBooksRecord(module: string, recordId: string): Promise<ZohoRecord> {

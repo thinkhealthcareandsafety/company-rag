@@ -144,12 +144,35 @@ export async function getRecord(module: string, recordId: string, fields?: strin
   return record;
 }
 
-export async function queryRecords(module: string, coql: string): Promise<ZohoRecord[]> {
-  const data = await zohoRequest<{ data: ZohoRecord[] }>(`/crm/v6/coql`, {
+export interface QueryRecordsResult {
+  records: ZohoRecord[];
+  // Zoho COQL caps a single query at 200 rows regardless of LIMIT, and has no
+  // server-side SUM/aggregate functions — so unlike Books' listBooksRecords,
+  // we can't safely auto-paginate here (the model may have deliberately
+  // written "limit 10" for a top-N query, not an exhaustive one). Instead we
+  // surface moreRecords so the model can decide whether to re-query with a
+  // higher OFFSET for a complete total, and compute an exact sum over
+  // whatever numeric "Amount" field is present so it never has to add up
+  // rows by hand for what it did retrieve.
+  moreRecords: boolean;
+  amountSum?: number;
+}
+
+export async function queryRecords(module: string, coql: string): Promise<QueryRecordsResult> {
+  const data = await zohoRequest<{ data: ZohoRecord[]; info?: { more_records?: boolean } }>(`/crm/v6/coql`, {
     method: "POST",
     body: JSON.stringify({ select_query: coql }),
   });
-  return data.data ?? [];
+  const records = data.data ?? [];
+
+  const amounts = records
+    .map((r) => r.Amount)
+    .filter((v): v is number | string => typeof v === "number" || typeof v === "string")
+    .map(Number)
+    .filter((n) => !Number.isNaN(n));
+  const amountSum = amounts.length > 0 ? Math.round(amounts.reduce((a, b) => a + b, 0) * 100) / 100 : undefined;
+
+  return { records, moreRecords: data.info?.more_records ?? false, amountSum };
 }
 
 export interface ListRecordsPage {

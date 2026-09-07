@@ -49,7 +49,7 @@ export const toolDeclarations: FunctionDeclaration[] = [
   {
     name: "query_crm_records",
     description:
-      "Runs a live Zoho COQL query for filtered/aggregate customer questions (e.g. 'accounts with no activity in 30 days', 'deals over $10k'). Provide a valid COQL select statement.",
+      "Runs a live Zoho COQL query for filtered/aggregate customer questions (e.g. 'accounts with no activity in 30 days', 'deals over $10k'). Provide a valid COQL select statement. Zoho caps results at 200 rows per call regardless of LIMIT — the response's moreRecords flag tells you if more exist. If a numeric 'Amount' field was selected, amountSum is an exact server-computed total over the rows returned; quote it directly instead of adding amounts yourself.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -66,7 +66,7 @@ export const toolDeclarations: FunctionDeclaration[] = [
   {
     name: "list_books_records",
     description:
-      "Lists/filters live Zoho Books records — invoices, estimates, bills, expenses, sales orders, purchase orders, customer/vendor payments, credit/debit notes, contacts (customers/vendors), or projects. Use for financial/accounting questions (e.g. 'unpaid invoices', 'expenses this month', 'overdue bills').",
+      "Lists/filters live Zoho Books records — invoices, estimates, bills, expenses, sales orders, purchase orders, customer/vendor payments, credit/debit notes, contacts (customers/vendors), or projects. Use for financial/accounting questions (e.g. 'unpaid invoices', 'expenses this month', 'overdue bills'). The response includes an amountSummary (exact server-computed sum per currency) — for any total/sum question, quote that number directly rather than adding up individual record amounts yourself.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -156,15 +156,15 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
         return { source: "zoho_crm_live", record };
       }
       case "query_crm_records": {
-        const records = await queryRecords(args.module as string, args.coql as string);
-        return { source: "zoho_crm_live", records };
+        const { records, moreRecords, amountSum } = await queryRecords(args.module as string, args.coql as string);
+        return { source: "zoho_crm_live", records, moreRecords, amountSum };
       }
       case "list_books_records": {
-        const { records, hasMorePage } = await listBooksRecords(
+        const { records, hasMorePage, amountSummary } = await listBooksRecords(
           args.module as string,
           (args.filters as Record<string, string> | undefined) ?? {},
         );
-        return { source: "zoho_books_live", records, hasMorePage };
+        return { source: "zoho_books_live", records, hasMorePage, amountSummary };
       }
       case "get_books_record": {
         const record = await getBooksRecord(args.module as string, args.record_id as string);
