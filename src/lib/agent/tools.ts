@@ -3,6 +3,7 @@ import { searchDocuments } from "@/lib/retrieval/vectorSearch";
 import { resolveEntity } from "@/lib/crm/entityResolution";
 import { getRecord, queryRecords, ZohoApiError } from "@/lib/crm/zohoClient";
 import { listBooksRecords, getBooksRecord, BOOKS_MODULES } from "@/lib/crm/zohoBooksClient";
+import { listInventoryRecords, getInventoryRecord, INVENTORY_MODULES } from "@/lib/crm/zohoInventoryClient";
 
 export const toolDeclarations: FunctionDeclaration[] = [
   {
@@ -92,6 +93,36 @@ export const toolDeclarations: FunctionDeclaration[] = [
       required: ["module", "record_id"],
     },
   },
+  {
+    name: "list_inventory_records",
+    description:
+      "Lists/filters live Zoho Inventory items, composite items, or warehouses. Use for stock/catalog questions (e.g. 'how much stock of X do we have', 'which items are low on stock', 'list our warehouses'). For invoices, orders, bills, or payments use list_books_records instead — Inventory only adds stock/catalog data here.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        module: { type: Type.STRING, enum: INVENTORY_MODULES },
+        filters: {
+          type: Type.OBJECT,
+          description:
+            "Optional Zoho Inventory filter query params for this module, e.g. {\"search_text\": \"widget\"} or {\"filter_by\": \"Status.LowStock\"} for items. Omit for an unfiltered listing.",
+          properties: {},
+        },
+      },
+      required: ["module"],
+    },
+  },
+  {
+    name: "get_inventory_record",
+    description: "Fetches a single live Zoho Inventory record by its ID (e.g. a specific item) once you know the ID from list_inventory_records.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        module: { type: Type.STRING, enum: INVENTORY_MODULES },
+        record_id: { type: Type.STRING },
+      },
+      required: ["module", "record_id"],
+    },
+  },
 ];
 
 /**
@@ -138,6 +169,17 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
       case "get_books_record": {
         const record = await getBooksRecord(args.module as string, args.record_id as string);
         return { source: "zoho_books_live", record };
+      }
+      case "list_inventory_records": {
+        const { records, hasMorePage } = await listInventoryRecords(
+          args.module as string,
+          (args.filters as Record<string, string> | undefined) ?? {},
+        );
+        return { source: "zoho_inventory_live", records, hasMorePage };
+      }
+      case "get_inventory_record": {
+        const record = await getInventoryRecord(args.module as string, args.record_id as string);
+        return { source: "zoho_inventory_live", record };
       }
       default:
         return { error: `Unknown tool: ${name}` };

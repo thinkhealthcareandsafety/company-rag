@@ -41,6 +41,8 @@ const TOOL_LABELS: Record<string, string> = {
   query_crm_records: "Querying CRM",
   list_books_records: "Querying Zoho Books",
   get_books_record: "Fetching Books record",
+  list_inventory_records: "Querying Zoho Inventory",
+  get_inventory_record: "Fetching Inventory record",
 };
 
 const SAMPLE_QUESTIONS = ["What is our refund policy?", "Is JYOTHY LABS LIMITED one of our accounts?"];
