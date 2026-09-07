@@ -25,6 +25,7 @@ export function TopNav({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
       </span>
       <nav>
         <Link href="/">Chat</Link>
+        <Link href="/digest">Digest</Link>
         <Link href="/documents">Documents</Link>
         <Link href="/shortcuts">Shortcuts</Link>
         <Link href="/team">Team</Link>
