@@ -122,35 +122,23 @@ button {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 65%, var(--accent-3));
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.brand-mark svg {
-  width: 15px;
-  height: 15px;
-  color: #fff;
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.brand-name-short {
-  display: inline;
-}
-
-.brand-name-full {
-  display: none;
-}
-
-@media (min-width: 720px) {
-  .brand-name-short {
-    display: none;
-  }
-
-  .brand-name-full {
-    display: inline;
-  }
+.brand-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-email {
@@ -235,16 +223,16 @@ button {
   height: 52px;
   margin: 0 auto 1.25rem;
   border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 65%, var(--accent-3));
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.auth-mark svg {
-  width: 26px;
-  height: 26px;
-  color: #fff;
+.auth-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .auth-card h1 {
@@ -605,16 +593,16 @@ button {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 65%, var(--accent-3));
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.chat-empty-mark svg {
-  width: 30px;
-  height: 30px;
-  color: #fff;
+.chat-empty-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .chat-empty h1 {
@@ -692,16 +680,16 @@ button {
   height: 30px;
   margin-top: 0.1rem;
   border-radius: var(--radius-sm);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 65%, var(--accent-3));
 }
 
-.chat-avatar svg {
-  width: 16px;
-  height: 16px;
+.chat-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .chat-bubble-user {

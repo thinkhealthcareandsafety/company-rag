@@ -1,6 +1,6 @@
 "use client";
 
-import { SparkIcon, MenuIcon } from "@/components/icons";
+import { MenuIcon } from "@/components/icons";
 import { SimpleNavDrawer } from "@/components/Sidebar/SimpleNavDrawer";
 
 export function TopNav({ onToggleSidebar, sidebarOpen }: { onToggleSidebar?: () => void; sidebarOpen?: boolean }) {
@@ -19,11 +19,10 @@ export function TopNav({ onToggleSidebar, sidebarOpen }: { onToggleSidebar?: () 
           <SimpleNavDrawer />
         )}
         <span className="brand-mark">
-          <SparkIcon />
+          <img src="/logo.jpg" alt="think health" />
         </span>
-        <span className="brand-name" title="Think Healthcare & Safety">
-          <span className="brand-name-full">Think Healthcare &amp; Safety</span>
-          <span className="brand-name-short">THS</span>
+        <span className="brand-name" title="think health">
+          think health
         </span>
       </span>
     </header>

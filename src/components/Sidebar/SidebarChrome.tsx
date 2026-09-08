@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { SparkIcon, CloseIcon } from "@/components/icons";
+import { CloseIcon } from "@/components/icons";
 
 const NAV_LINKS = [
   { href: "/", label: "Chat" },
@@ -19,11 +19,9 @@ export function SidebarHeader({ onClose }: { onClose: () => void }) {
     <div className="sidebar-drawer-header">
       <span className="brand">
         <span className="brand-mark">
-          <SparkIcon />
+          <img src="/logo.jpg" alt="think health" />
         </span>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          Think Healthcare &amp; Safety
-        </span>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>think health</span>
       </span>
       <button type="button" className="sidebar-toggle-btn" onClick={onClose} aria-label="Close menu">
         <CloseIcon />

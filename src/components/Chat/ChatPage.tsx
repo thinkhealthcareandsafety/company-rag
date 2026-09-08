@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import { TopNav } from "@/components/TopNav";
 import { ChatSidebar } from "@/components/Chat/ChatSidebar";
 import { PageLoader } from "@/components/Loader";
-import { SparkIcon, SendIcon } from "@/components/icons";
+import { SendIcon } from "@/components/icons";
 
 interface ToolActivity {
   name: string;
@@ -295,9 +295,9 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
           {loadingHistory ? <PageLoader label="Loading conversation…" /> : messages.length === 0 ? (
             <div className="chat-empty">
               <div className="chat-empty-mark">
-                <SparkIcon />
+                <img src="/logo.jpg" alt="think health" />
               </div>
-              <h1>Welcome to Think Healthcare &amp; Safety AI</h1>
+              <h1>Welcome to think health AI</h1>
               <p>
                 Ask about your policy documents, live Zoho CRM records, or Zoho Books data — or combine all three in
                 one question.
@@ -321,7 +321,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
                   ) : (
                     <div key={i} className="chat-row">
                       <div className="chat-avatar">
-                        <SparkIcon />
+                        <img src="/logo.jpg" alt="think health" />
                       </div>
                       <div className="chat-assistant-content">
                         {m.tools && m.tools.length > 0 && (

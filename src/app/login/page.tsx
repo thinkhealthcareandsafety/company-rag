@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { SparkIcon } from "@/components/icons";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,10 +31,10 @@ export default function LoginPage() {
     <div className="auth-page">
       <form className="card auth-card" onSubmit={handleSubmit}>
         <div className="auth-mark">
-          <SparkIcon />
+          <img src="/logo.jpg" alt="think health" />
         </div>
         <h1>Welcome back</h1>
-        <p className="auth-subtitle">Sign in to Think Healthcare &amp; Safety</p>
+        <p className="auth-subtitle">Sign in to think health</p>
         {error && <p className="error-text">{error}</p>}
         <div className="field">
           <label htmlFor="email">Email</label>
