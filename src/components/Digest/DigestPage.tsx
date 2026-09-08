@@ -6,6 +6,10 @@ import { PageLoader } from "@/components/Loader";
 import type { Digest } from "@/lib/digest";
 import type { DraftMessageFacts } from "@/lib/draftMessage";
 
+// The API route appends this to the core Digest shape — a server-config
+// fact, not digest data, so it's kept separate from the Digest type itself.
+type DigestResponse = Digest & { emailDigestConfigured: boolean };
+
 const SECTION_TITLE_STYLE: React.CSSProperties = { fontSize: "1rem", fontWeight: 700, margin: "0 0 0.75rem" };
 const ROW_STYLE: React.CSSProperties = {
   display: "flex",
@@ -190,7 +194,7 @@ function DraftMessageButton({ facts }: { facts: DraftMessageFacts }) {
 }
 
 export function DigestPage() {
-  const [digest, setDigest] = useState<Digest | null>(null);
+  const [digest, setDigest] = useState<DigestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -235,6 +239,21 @@ export function DigestPage() {
         <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: "0 0 1.5rem" }}>
           What needs attention right now — at a glance, without having to ask.
         </p>
+
+        {digest && (
+          <p
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              fontSize: "0.78rem",
+              color: digest.emailDigestConfigured ? "var(--success)" : "var(--text-faint)",
+              margin: "0 0 1.25rem",
+            }}
+          >
+            📧 Email digest: {digest.emailDigestConfigured ? "sends daily at 8am" : "not configured yet"}
+          </p>
+        )}
 
         {error && <p className="error-text">{error}</p>}
 
