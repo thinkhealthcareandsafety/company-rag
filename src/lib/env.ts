@@ -67,3 +67,17 @@ export function getRedisEnv(): { UPSTASH_REDIS_REST_URL: string; UPSTASH_REDIS_R
   if (!url || !token) return undefined;
   return { UPSTASH_REDIS_REST_URL: url, UPSTASH_REDIS_REST_TOKEN: token };
 }
+
+/**
+ * Scheduled email digest is opt-in infrastructure, same reasoning as Redis
+ * above — missing config just means the send endpoint declines to send
+ * rather than the app failing to start.
+ */
+export function getDigestEmailEnv():
+  | { RESEND_API_KEY: string; DIGEST_EMAIL_TO: string; DIGEST_EMAIL_FROM: string }
+  | undefined {
+  const apiKey = process.env.RESEND_API_KEY;
+  const to = process.env.DIGEST_EMAIL_TO;
+  if (!apiKey || !to) return undefined;
+  return { RESEND_API_KEY: apiKey, DIGEST_EMAIL_TO: to, DIGEST_EMAIL_FROM: process.env.DIGEST_EMAIL_FROM || "onboarding@resend.dev" };
+}

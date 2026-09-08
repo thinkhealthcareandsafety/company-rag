@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter } from "next/font/google";
 import { Providers } from "./providers";
@@ -9,6 +9,11 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swa
 export const metadata: Metadata = {
   title: "think health",
   description: "AI assistant for think health — documents, live CRM, and Books data in one place",
+  appleWebApp: { title: "think health", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#d94fa8",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

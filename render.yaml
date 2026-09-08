@@ -53,3 +53,13 @@ services:
         sync: false
       - key: NEXT_PUBLIC_SENTRY_DSN
         sync: false
+      # Optional — scheduled email digest (POST /api/digest/email). Declines
+      # to send rather than erroring if left unset.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: DIGEST_EMAIL_TO
+        sync: false
+      - key: DIGEST_EMAIL_FROM
+        sync: false
+      - key: DIGEST_EMAIL_SECRET
+        sync: false
