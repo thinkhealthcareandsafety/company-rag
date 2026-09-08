@@ -17,9 +17,11 @@ export function SimpleNavDrawer() {
 
   return (
     <>
-      <button type="button" className="sidebar-toggle-btn" onClick={() => setOpen(true)} aria-label="Open menu">
-        <MenuIcon />
-      </button>
+      {!open && (
+        <button type="button" className="sidebar-toggle-btn" onClick={() => setOpen(true)} aria-label="Open menu">
+          <MenuIcon />
+        </button>
+      )}
       {open && <div className="sidebar-backdrop" onClick={() => setOpen(false)} />}
       <aside className={`chat-sidebar simple-drawer ${open ? "open" : ""}`}>
         <div className="chat-sidebar-inner">

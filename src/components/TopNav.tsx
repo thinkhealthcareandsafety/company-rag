@@ -3,14 +3,18 @@
 import { SparkIcon, MenuIcon } from "@/components/icons";
 import { SimpleNavDrawer } from "@/components/Sidebar/SimpleNavDrawer";
 
-export function TopNav({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
+export function TopNav({ onToggleSidebar, sidebarOpen }: { onToggleSidebar?: () => void; sidebarOpen?: boolean }) {
   return (
     <header className="top-nav">
       <span className="brand">
         {onToggleSidebar ? (
-          <button type="button" className="sidebar-toggle-btn" onClick={onToggleSidebar} aria-label="Toggle sidebar">
-            <MenuIcon />
-          </button>
+          // Hidden while the sidebar's own header already shows a close (X)
+          // button — showing both at once is a confusing double-toggle.
+          !sidebarOpen && (
+            <button type="button" className="sidebar-toggle-btn" onClick={onToggleSidebar} aria-label="Open sidebar">
+              <MenuIcon />
+            </button>
+          )
         ) : (
           <SimpleNavDrawer />
         )}

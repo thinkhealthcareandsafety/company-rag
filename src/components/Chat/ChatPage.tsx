@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -47,6 +47,16 @@ const TOOL_LABELS: Record<string, string> = {
 
 const SAMPLE_QUESTIONS = ["What is our refund policy?", "Is JYOTHY LABS LIMITED one of our accounts?"];
 
+// Navigating from "/" to "/c/<id>" after a brand-new conversation's first
+// reply crosses a route boundary (different page.tsx files), so React
+// unmounts this component and mounts a fresh instance — that instance would
+// otherwise show a loading spinner and re-fetch from the DB messages it just
+// finished streaming a moment ago, a jarring flash for something already in
+// memory. This one-shot handoff lets the new instance pick up right where
+// the old one left off instead. Module-level (not state) since it needs to
+// survive the unmount/remount itself.
+const conversationHandoff = new Map<string, Message[]>();
+
 export function ChatPage({ initialConversationId }: { initialConversationId?: string }) {
   const router = useRouter();
   const [conversationId, setConversationId] = useState(initialConversationId);
@@ -57,11 +67,13 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   const [error, setError] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  // Lazy-initialized from viewport width so desktop starts open and mobile
-  // starts closed (an overlay drawer there) without a post-mount effect —
-  // `window` is guarded for the SSR pass, which always renders "closed" and
-  // is corrected the moment this client component actually mounts.
-  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 860);
+  // Starts closed on every render pass, server and client alike — a lazy
+  // initializer reading window.innerWidth looks appealing, but window exists
+  // during client hydration too, so it wouldn't just affect the initial
+  // client render, it would make that render disagree with what the server
+  // sent, which is exactly what a hydration mismatch is. Corrected safely in
+  // an effect below, after hydration has already reconciled.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -73,12 +85,39 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
       .catch(() => {});
   }, []);
 
+  // Layout effect (not a plain effect) so this resolves before the browser
+  // paints — avoids a visible closed-then-open flash on desktop, while still
+  // running only after hydration has already reconciled against the
+  // server's "closed" markup, so it can't cause a mismatch.
+  useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (window.innerWidth >= 860) setSidebarOpen(true);
+  }, []);
+
   // Callers key each <ChatPage> instance by conversation id (see page.tsx /
   // c/[id]/page.tsx), so a genuinely new conversation is a fresh mount with
   // fresh initial state — no reset-on-prop-change effect needed. This effect
   // only has to fetch the history for that one, fixed id.
   useEffect(() => {
     if (!initialConversationId) return;
+
+    const handoff = conversationHandoff.get(initialConversationId);
+    if (handoff) {
+      // We just streamed this conversation's first reply in the previous
+      // component instance a moment ago — reuse it instead of a redundant
+      // fetch that would otherwise flash a loading spinner over content
+      // already sitting right there.
+      conversationHandoff.delete(initialConversationId);
+      // One-time synchronous init for this mount (this component remounts
+      // via `key={id}` per conversation, so this never re-runs mid-lifetime)
+      // — equivalent to correcting a stale SSR-guessed initial value, not a
+      // state reset tied to a changing prop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMessages(handoff);
+      setLoadingHistory(false);
+      return;
+    }
+
     fetch(`/api/conversations/${initialConversationId}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { messages: Message[] } | null) => {
@@ -180,6 +219,13 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
     // it earlier would remount this page against `/c/<id>` mid-stream and
     // strand the in-flight reader in the unmounting component instance.
     if (wasNewConversation && resolvedConversationId) {
+      // Read the latest messages synchronously via the updater callback —
+      // the `messages` closure variable here is stale (captured at render
+      // time), this is the reliable way to get the current value.
+      setMessages((prev) => {
+        conversationHandoff.set(resolvedConversationId!, prev);
+        return prev;
+      });
       router.replace(`/c/${resolvedConversationId}`, { scroll: false });
     }
   }
@@ -244,7 +290,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
     <div className="chat-page-root-row">
       <ChatSidebar activeId={conversationId} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="chat-page-root">
-        <TopNav onToggleSidebar={() => setSidebarOpen((o) => !o)} />
+        <TopNav onToggleSidebar={() => setSidebarOpen((o) => !o)} sidebarOpen={sidebarOpen} />
         <div className="chat-shell">
           {loadingHistory ? <PageLoader label="Loading conversation…" /> : messages.length === 0 ? (
             <div className="chat-empty">
