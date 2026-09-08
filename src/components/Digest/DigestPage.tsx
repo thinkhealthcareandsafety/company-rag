@@ -18,6 +18,31 @@ const ROW_STYLE: React.CSSProperties = {
   gap: "1rem",
   padding: "0.75rem 1rem",
 };
+// Tabular figures so a column of amounts lines up on their decimal point
+// instead of each number being a different width.
+const MONEY_STYLE: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
+
+/**
+ * A bare "INR 37712.8" reads as a label, not money — no symbol, no thousands
+ * grouping, inconsistent decimal places from one record to the next. This
+ * renders through Intl's currency formatter when the code is a real ISO
+ * currency (₹37,712.80 / $191.00); falls back to plain grouped digits for
+ * anything Intl doesn't recognize rather than throwing.
+ */
+function formatMoney(amount: unknown, currencyCode: unknown): string {
+  const num = Number(amount);
+  if (Number.isNaN(num)) return String(amount ?? "");
+
+  const code = typeof currencyCode === "string" ? currencyCode.trim().toUpperCase() : "";
+  if (/^[A-Z]{3}$/.test(code)) {
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(num);
+    } catch {
+      // Intl doesn't recognize this code — fall through to a plain number
+    }
+  }
+  return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 const PREVIEW_COUNT = 5;
 
 interface StatCardProps {
@@ -197,22 +222,47 @@ export function DigestPage() {
   const [digest, setDigest] = useState<DigestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [progress, setProgress] = useState<{ percent: number; label: string } | null>(null);
 
-  const refresh = useCallback(async (forceRefresh = false) => {
-    setError(null);
-    try {
-      const res = await fetch(forceRefresh ? "/api/digest?refresh=1" : "/api/digest");
-      if (!res.ok) throw new Error("Failed to load digest");
-      setDigest(await res.json());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load digest");
-    }
+  // GET-based, so EventSource (native SSE) fits better here than the manual
+  // fetch+reader parsing chat uses for its POST stream — real progress from
+  // each of the three live Zoho checks landing, not a simulated timer.
+  const refresh = useCallback((forceRefresh = false) => {
+    return new Promise<void>((resolve) => {
+      setError(null);
+      setProgress({ percent: 0, label: "Starting…" });
+
+      const es = new EventSource(forceRefresh ? "/api/digest?refresh=1" : "/api/digest");
+
+      es.addEventListener("progress", (e) => {
+        setProgress(JSON.parse((e as MessageEvent).data));
+      });
+      es.addEventListener("done", (e) => {
+        setDigest(JSON.parse((e as MessageEvent).data));
+        setProgress(null);
+        es.close();
+        resolve();
+      });
+      es.addEventListener("fail", (e) => {
+        const data = JSON.parse((e as MessageEvent).data) as { message?: string };
+        setError(data.message ?? "Failed to load digest");
+        setProgress(null);
+        es.close();
+        resolve();
+      });
+      es.onerror = () => {
+        setError((prev) => prev ?? "Lost connection while loading the digest");
+        setProgress(null);
+        es.close();
+        resolve();
+      };
+    });
   }, []);
 
   useEffect(() => {
-    // refresh() sets state after an awaited fetch resolves, not synchronously
-    // — the standard fetch-on-mount pattern used across this app's pages.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // refresh() sets state from event-stream callbacks, not synchronously in
+    // this effect body — the standard fetch-on-mount pattern used across
+    // this app's pages, just over an event stream instead of a single fetch.
     refresh();
   }, [refresh]);
 
@@ -223,7 +273,7 @@ export function DigestPage() {
   }
 
   const overdueTotal = digest?.overdueInvoices.totalBalance
-    .map((t) => `${t.currencyCode} ${t.sum.toLocaleString()}`)
+    .map((t) => formatMoney(t.sum, t.currencyCode))
     .join(" + ");
 
   return (
@@ -233,7 +283,7 @@ export function DigestPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
           <h1 style={{ fontSize: "1.35rem", fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>Digest</h1>
           <button className="btn" onClick={handleRefresh} disabled={refreshing || digest === null}>
-            {refreshing ? "Refreshing…" : "Refresh"}
+            {refreshing && progress ? `Refreshing… (${progress.percent}%)` : refreshing ? "Refreshing…" : "Refresh"}
           </button>
         </div>
         <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: "0 0 1.5rem" }}>
@@ -258,7 +308,25 @@ export function DigestPage() {
         {error && <p className="error-text">{error}</p>}
 
         {digest === null ? (
-          <PageLoader />
+          progress ? (
+            <div style={{ padding: "3rem 1rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+              <div style={{ width: "100%", maxWidth: 320, height: 8, borderRadius: "var(--radius-full)", background: "var(--surface-hover)", overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${progress.percent}%`,
+                    height: "100%",
+                    background: "linear-gradient(90deg, var(--accent), var(--accent-2))",
+                    transition: "width 0.3s ease",
+                  }}
+                />
+              </div>
+              <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: 0 }}>
+                {progress.label} ({progress.percent}%)
+              </p>
+            </div>
+          ) : (
+            <PageLoader />
+          )
         ) : (
           <>
             {digest.errors.length > 0 && (
@@ -315,8 +383,8 @@ export function DigestPage() {
                           Invoice {String(inv.invoiceNumber ?? "")} · due {String(inv.dueDate ?? "")}
                         </div>
                       </div>
-                      <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--danger)", flexShrink: 0 }}>
-                        {String(inv.currencyCode ?? "")} {String(inv.balance ?? "")}
+                      <div style={{ ...MONEY_STYLE, fontSize: "0.9rem", fontWeight: 600, color: "var(--danger)", flexShrink: 0 }}>
+                        {formatMoney(inv.balance, inv.currencyCode)}
                       </div>
                     </div>
                     <DraftMessageButton
@@ -368,7 +436,11 @@ export function DigestPage() {
                         </div>
                       </div>
                       {deal.amount !== undefined && deal.amount !== null && (
-                        <div style={{ fontSize: "0.9rem", fontWeight: 600, flexShrink: 0 }}>{String(deal.amount)}</div>
+                        <div style={{ ...MONEY_STYLE, fontSize: "0.9rem", fontWeight: 600, flexShrink: 0 }}>
+                          {/* COQL doesn't return a currency field for Deals, so this stays an
+                              unlabeled grouped number rather than guessing a currency symbol. */}
+                          {formatMoney(deal.amount, undefined)}
+                        </div>
                       )}
                     </div>
                     <DraftMessageButton

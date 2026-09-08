@@ -110,8 +110,24 @@ async function buildNarrative(digest: Omit<Digest, "narrative">): Promise<string
  * look at. Each section fails independently (one Zoho hiccup shouldn't blank
  * the whole digest) and gets logged into `errors` instead of throwing.
  */
-async function fetchDigest(): Promise<Digest> {
+export type DigestProgress = (percent: number, label: string) => void;
+
+async function fetchDigest(onProgress?: DigestProgress): Promise<Digest> {
   const errors: string[] = [];
+
+  // Naming what's still IN FLIGHT (not what just finished) is the more
+  // useful signal — Inventory pages through the full item catalog and is
+  // reliably the long pole, so without this the bar would sit showing
+  // "Checked overdue invoices" for several seconds while the real wait is
+  // on stock levels, reading as stuck rather than still working.
+  const pending = new Set(["overdue invoices", "stock levels", "CRM deals"]);
+  const reportCheck = (name: string) => {
+    pending.delete(name);
+    const percent = 10 + Math.round(((3 - pending.size) / 3) * 70);
+    const label = pending.size > 0 ? `Checking ${[...pending].join(", ")}…` : "Checked all sources";
+    onProgress?.(percent, label);
+  };
+  onProgress?.(5, `Checking ${[...pending].join(", ")}…`);
 
   const cutoff = new Date(Date.now() - STALE_DEAL_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + "+00:00";
 
@@ -123,21 +139,39 @@ async function fetchDigest(): Promise<Digest> {
   // the main remaining cost — see buildDigest's cache below for how that's
   // kept off the hot path for repeat page visits.
   const [overdueInvoices, items, staleDealsResult] = await Promise.all([
-    listBooksRecords("invoices", { status: "overdue" }).catch((err) => {
-      errors.push(`Overdue invoices: ${err instanceof Error ? err.message : "failed"}`);
-      return { records: [], hasMorePage: false, amountSummary: undefined };
-    }),
-    listInventoryRecords("items", {}).catch((err) => {
-      errors.push(`Inventory items: ${err instanceof Error ? err.message : "failed"}`);
-      return { records: [], hasMorePage: false };
-    }),
+    listBooksRecords("invoices", { status: "overdue" })
+      .then((r) => {
+        reportCheck("overdue invoices");
+        return r;
+      })
+      .catch((err) => {
+        errors.push(`Overdue invoices: ${err instanceof Error ? err.message : "failed"}`);
+        reportCheck("overdue invoices");
+        return { records: [], hasMorePage: false, amountSummary: undefined };
+      }),
+    listInventoryRecords("items", {})
+      .then((r) => {
+        reportCheck("stock levels");
+        return r;
+      })
+      .catch((err) => {
+        errors.push(`Inventory items: ${err instanceof Error ? err.message : "failed"}`);
+        reportCheck("stock levels");
+        return { records: [], hasMorePage: false };
+      }),
     queryRecords(
       "Deals",
       `select id, Deal_Name, Amount, Stage, Modified_Time from Deals where Modified_Time < '${cutoff}' and Stage not in ('Closed Won', 'Closed Lost') order by Modified_Time asc limit 20`,
-    ).catch((err) => {
-      errors.push(`Stale deals: ${err instanceof Error ? err.message : "failed"}`);
-      return { records: [], moreRecords: false, amountSum: undefined };
-    }),
+    )
+      .then((r) => {
+        reportCheck("CRM deals");
+        return r;
+      })
+      .catch((err) => {
+        errors.push(`Stale deals: ${err instanceof Error ? err.message : "failed"}`);
+        reportCheck("CRM deals");
+        return { records: [], moreRecords: false, amountSum: undefined };
+      }),
   ]);
 
   const digestWithoutNarrative = {
@@ -171,7 +205,11 @@ async function fetchDigest(): Promise<Digest> {
     errors,
   };
 
-  return { ...digestWithoutNarrative, narrative: await buildNarrative(digestWithoutNarrative) };
+  onProgress?.(85, "Summarizing…");
+  const narrative = await buildNarrative(digestWithoutNarrative);
+  onProgress?.(100, "Done");
+
+  return { ...digestWithoutNarrative, narrative };
 }
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -186,12 +224,13 @@ let cache: { data: Digest; expiresAt: number } | undefined;
  * Refresh) pays that cost; anyone else opening the page in that window gets
  * an instant response that's still at most 2 minutes stale.
  */
-export async function buildDigest(forceRefresh = false): Promise<Digest> {
+export async function buildDigest(forceRefresh = false, onProgress?: DigestProgress): Promise<Digest> {
   if (!forceRefresh && cache && cache.expiresAt > Date.now()) {
+    onProgress?.(100, "Loaded from cache");
     return cache.data;
   }
 
-  const data = await fetchDigest();
+  const data = await fetchDigest(onProgress);
   cache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
   return data;
 }
