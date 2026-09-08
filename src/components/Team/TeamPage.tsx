@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { TopNav } from "@/components/TopNav";
 import { PageLoader } from "@/components/Loader";
+import { PasswordInput } from "@/components/PasswordInput";
 
 interface TeamMember {
   id: string;
@@ -90,14 +91,7 @@ export function TeamPage() {
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label htmlFor="team-password">Password</label>
-            <input
-              id="team-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={8}
-              required
-            />
+            <PasswordInput id="team-password" value={password} onChange={setPassword} minLength={8} required />
           </div>
           <button type="submit" className="btn btn-primary" disabled={saving} style={{ alignSelf: "flex-start" }}>
             {saving ? "Adding…" : "Add teammate"}

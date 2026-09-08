@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { PasswordInput } from "@/components/PasswordInput";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,13 +43,7 @@ export default function LoginPage() {
         </div>
         <div className="field">
           <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <PasswordInput id="password" value={password} onChange={setPassword} required />
         </div>
         <button type="submit" className="btn btn-primary" style={{ width: "100%" }} disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
