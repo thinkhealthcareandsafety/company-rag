@@ -2,7 +2,7 @@ import { Type, type FunctionDeclaration } from "@google/genai";
 import { searchDocuments } from "@/lib/retrieval/vectorSearch";
 import { resolveEntity } from "@/lib/crm/entityResolution";
 import { getRecord, queryRecords, ZohoApiError } from "@/lib/crm/zohoClient";
-import { listBooksRecords, getBooksRecord, itemsWithInvoiceHistory, BOOKS_MODULES } from "@/lib/crm/zohoBooksClient";
+import { listBooksRecords, getBooksRecord, countInvoicesByItem, BOOKS_MODULES } from "@/lib/crm/zohoBooksClient";
 import { listInventoryRecords, getInventoryRecord, INVENTORY_MODULES } from "@/lib/crm/zohoInventoryClient";
 
 export const toolDeclarations: FunctionDeclaration[] = [
@@ -126,18 +126,19 @@ export const toolDeclarations: FunctionDeclaration[] = [
   {
     name: "find_items_by_invoice_history",
     description:
-      "Cross-references the Zoho Inventory item catalog against Zoho Books invoice history — use for questions combining item status with whether an item has ever been invoiced (e.g. 'active items with at least one invoice', 'items that have never been billed'). This is slower than other tools (checks items one by one, may take 10-20+ seconds) — only use it when the question genuinely needs this cross-reference, never for a plain item or invoice lookup those other tools already handle.",
+      "Cross-references the Zoho Inventory item catalog against Zoho Books invoice history — use for questions combining item status with whether/how many times an item has been invoiced (e.g. 'active items with at least one invoice', 'items that have never been billed', 'how many invoices does each item have'). The response includes an exact invoiceCount per matched item — quote it directly, don't guess or recount. ALWAYS narrow with search_text when the question mentions a name/keyword (e.g. 'AED' items) — this is checked item-by-item, so an unfiltered catalog scan is far slower than it needs to be. Omit invoice_presence to get every checked item's count in ONE call and derive both 'has' and 'no invoice' groups yourself from that — calling this twice (once per direction) for the same question wastes an entire redundant catalog scan. This is still slower than other tools (checks items one by one) — only use it when the question genuinely needs this cross-reference.",
     parameters: {
       type: Type.OBJECT,
       properties: {
         item_status: { type: Type.STRING, enum: ["active", "inactive", "all"], description: "Defaults to active" },
+        search_text: { type: Type.STRING, description: "Narrow to items whose name/SKU matches this text before checking invoices — always set this when the question names or implies a specific item, category, or keyword" },
         invoice_presence: {
           type: Type.STRING,
           enum: ["has_invoice", "no_invoice"],
-          description: "Whether to return items that DO or DON'T have at least one invoice",
+          description: "Optional — restrict to items that DO or DON'T have at least one invoice. Omit to get every item's count in one call instead of needing two.",
         },
       },
-      required: ["invoice_presence"],
+      required: [],
     },
   },
 ];
@@ -205,19 +206,35 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
         const MAX_ITEMS_TO_CHECK = 300;
 
         const itemStatus = (args.item_status as string) ?? "active";
-        const invoicePresence = args.invoice_presence as "has_invoice" | "no_invoice";
+        const invoicePresence = args.invoice_presence as "has_invoice" | "no_invoice" | undefined;
         const filters: Record<string, string> = itemStatus === "all" ? {} : { status: itemStatus };
+        if (typeof args.search_text === "string" && args.search_text.trim()) {
+          filters.search_text = args.search_text.trim();
+        }
 
         const { records } = await listInventoryRecords("items", filters);
         const truncated = records.length > MAX_ITEMS_TO_CHECK;
         const toCheck = records.slice(0, MAX_ITEMS_TO_CHECK);
 
-        const withInvoices = await itemsWithInvoiceHistory(toCheck.map((r) => r.id));
-        const matched = toCheck.filter((r) => (invoicePresence === "has_invoice" ? withInvoices.has(r.id) : !withInvoices.has(r.id)));
+        const invoiceCounts = await countInvoicesByItem(toCheck.map((r) => r.id));
+        const matched = toCheck.filter((r) => {
+          if (!invoicePresence) return true; // no filter — return every checked item's count
+          const count = invoiceCounts.get(r.id)?.count ?? 0;
+          return invoicePresence === "has_invoice" ? count > 0 : count === 0;
+        });
 
         return {
           source: "zoho_cross_reference",
-          items: matched.map((r) => ({ id: r.id, name: r.name, sku: r.sku, status: r.status })),
+          items: matched.map((r) => {
+            const info = invoiceCounts.get(r.id);
+            return {
+              id: r.id,
+              name: r.name,
+              sku: r.sku,
+              status: r.status,
+              invoiceCount: info?.atLeast ? `${info.count}+` : (info?.count ?? 0),
+            };
+          }),
           totalItemsChecked: toCheck.length,
           truncated, // true means more matching items may exist beyond what was checked — say so, don't imply completeness
         };

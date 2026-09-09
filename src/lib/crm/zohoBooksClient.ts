@@ -209,14 +209,22 @@ export async function getBooksRecord(module: string, recordId: string): Promise<
 // this app's current OAuth scopes (confirmed: /reports/salesbyitem exists on
 // Zoho's side but returns "not authorized" — a scope this grant doesn't
 // have). The invoices list endpoint DOES support filtering by item_id
-// (confirmed live), so this checks item-by-item instead — one cheap,
-// minimal-payload existence check per item (per_page=1, no line-item detail
-// needed), with bounded concurrency so a few hundred items doesn't mean a
-// few hundred sequential round trips.
+// (confirmed live), so this checks item-by-item instead, with bounded
+// concurrency so a few hundred items doesn't mean a few hundred sequential
+// round trips. per_page=200 (not just 1) so the response's own record count
+// doubles as an exact invoice count per item, not just a yes/no.
 const INVOICE_CHECK_CONCURRENCY = 15;
 
-export async function itemsWithInvoiceHistory(itemIds: string[]): Promise<Set<string>> {
-  const withInvoices = new Set<string>();
+export interface ItemInvoiceCount {
+  count: number;
+  // true only in the rare case an item has 200+ invoices — count is then a
+  // floor (at least this many), not exact, since we don't paginate further
+  // per item on top of the existing per-item fan-out.
+  atLeast: boolean;
+}
+
+export async function countInvoicesByItem(itemIds: string[]): Promise<Map<string, ItemInvoiceCount>> {
+  const counts = new Map<string, ItemInvoiceCount>();
   let cursor = 0;
 
   async function worker() {
@@ -225,19 +233,22 @@ export async function itemsWithInvoiceHistory(itemIds: string[]): Promise<Set<st
       const query = new URLSearchParams({
         organization_id: getZohoBooksEnv().ZOHO_BOOKS_ORGANIZATION_ID,
         item_id: itemId,
-        per_page: "1",
+        per_page: "200",
       });
       try {
-        const data = await zohoRequestTo<{ invoices?: unknown[] }>(booksApiBaseUrl(), `invoices?${query.toString()}`);
-        if ((data.invoices?.length ?? 0) > 0) withInvoices.add(itemId);
+        const data = await zohoRequestTo<{ invoices?: unknown[]; page_context?: { has_more_page?: boolean } }>(
+          booksApiBaseUrl(),
+          `invoices?${query.toString()}`,
+        );
+        counts.set(itemId, { count: data.invoices?.length ?? 0, atLeast: data.page_context?.has_more_page ?? false });
       } catch {
         // One item's check failing shouldn't sink the whole cross-reference —
-        // it just won't be counted as having an invoice, which is the safe
-        // (under-, not over-, claiming) direction for a failure to fall on.
+        // it just won't appear in the result, which is the safe (under-, not
+        // over-, claiming) direction for a failure to fall on.
       }
     }
   }
 
   await Promise.all(Array.from({ length: Math.min(INVOICE_CHECK_CONCURRENCY, itemIds.length) }, worker));
-  return withInvoices;
+  return counts;
 }
