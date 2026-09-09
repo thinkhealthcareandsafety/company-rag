@@ -204,3 +204,40 @@ export async function getBooksRecord(module: string, recordId: string): Promise<
   if (!record) throw new ZohoApiError(`No ${module} record found with id ${recordId}`);
   return trimRecord(module, record);
 }
+
+// Books has no bulk "which items have been invoiced" report available under
+// this app's current OAuth scopes (confirmed: /reports/salesbyitem exists on
+// Zoho's side but returns "not authorized" — a scope this grant doesn't
+// have). The invoices list endpoint DOES support filtering by item_id
+// (confirmed live), so this checks item-by-item instead — one cheap,
+// minimal-payload existence check per item (per_page=1, no line-item detail
+// needed), with bounded concurrency so a few hundred items doesn't mean a
+// few hundred sequential round trips.
+const INVOICE_CHECK_CONCURRENCY = 15;
+
+export async function itemsWithInvoiceHistory(itemIds: string[]): Promise<Set<string>> {
+  const withInvoices = new Set<string>();
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < itemIds.length) {
+      const itemId = itemIds[cursor++]!;
+      const query = new URLSearchParams({
+        organization_id: getZohoBooksEnv().ZOHO_BOOKS_ORGANIZATION_ID,
+        item_id: itemId,
+        per_page: "1",
+      });
+      try {
+        const data = await zohoRequestTo<{ invoices?: unknown[] }>(booksApiBaseUrl(), `invoices?${query.toString()}`);
+        if ((data.invoices?.length ?? 0) > 0) withInvoices.add(itemId);
+      } catch {
+        // One item's check failing shouldn't sink the whole cross-reference —
+        // it just won't be counted as having an invoice, which is the safe
+        // (under-, not over-, claiming) direction for a failure to fall on.
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(INVOICE_CHECK_CONCURRENCY, itemIds.length) }, worker));
+  return withInvoices;
+}

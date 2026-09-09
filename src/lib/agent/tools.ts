@@ -2,7 +2,7 @@ import { Type, type FunctionDeclaration } from "@google/genai";
 import { searchDocuments } from "@/lib/retrieval/vectorSearch";
 import { resolveEntity } from "@/lib/crm/entityResolution";
 import { getRecord, queryRecords, ZohoApiError } from "@/lib/crm/zohoClient";
-import { listBooksRecords, getBooksRecord, BOOKS_MODULES } from "@/lib/crm/zohoBooksClient";
+import { listBooksRecords, getBooksRecord, itemsWithInvoiceHistory, BOOKS_MODULES } from "@/lib/crm/zohoBooksClient";
 import { listInventoryRecords, getInventoryRecord, INVENTORY_MODULES } from "@/lib/crm/zohoInventoryClient";
 
 export const toolDeclarations: FunctionDeclaration[] = [
@@ -123,6 +123,23 @@ export const toolDeclarations: FunctionDeclaration[] = [
       required: ["module", "record_id"],
     },
   },
+  {
+    name: "find_items_by_invoice_history",
+    description:
+      "Cross-references the Zoho Inventory item catalog against Zoho Books invoice history — use for questions combining item status with whether an item has ever been invoiced (e.g. 'active items with at least one invoice', 'items that have never been billed'). This is slower than other tools (checks items one by one, may take 10-20+ seconds) — only use it when the question genuinely needs this cross-reference, never for a plain item or invoice lookup those other tools already handle.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        item_status: { type: Type.STRING, enum: ["active", "inactive", "all"], description: "Defaults to active" },
+        invoice_presence: {
+          type: Type.STRING,
+          enum: ["has_invoice", "no_invoice"],
+          description: "Whether to return items that DO or DON'T have at least one invoice",
+        },
+      },
+      required: ["invoice_presence"],
+    },
+  },
 ];
 
 /**
@@ -180,6 +197,30 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
       case "get_inventory_record": {
         const record = await getInventoryRecord(args.module as string, args.record_id as string);
         return { source: "zoho_inventory_live", record };
+      }
+      case "find_items_by_invoice_history": {
+        // Bounded so this always finishes within the tool-call timeout —
+        // see the identical reasoning in zohoBooksClient.ts on why this is
+        // an item-by-item check rather than one bulk report call.
+        const MAX_ITEMS_TO_CHECK = 300;
+
+        const itemStatus = (args.item_status as string) ?? "active";
+        const invoicePresence = args.invoice_presence as "has_invoice" | "no_invoice";
+        const filters: Record<string, string> = itemStatus === "all" ? {} : { status: itemStatus };
+
+        const { records } = await listInventoryRecords("items", filters);
+        const truncated = records.length > MAX_ITEMS_TO_CHECK;
+        const toCheck = records.slice(0, MAX_ITEMS_TO_CHECK);
+
+        const withInvoices = await itemsWithInvoiceHistory(toCheck.map((r) => r.id));
+        const matched = toCheck.filter((r) => (invoicePresence === "has_invoice" ? withInvoices.has(r.id) : !withInvoices.has(r.id)));
+
+        return {
+          source: "zoho_cross_reference",
+          items: matched.map((r) => ({ id: r.id, name: r.name, sku: r.sku, status: r.status })),
+          totalItemsChecked: toCheck.length,
+          truncated, // true means more matching items may exist beyond what was checked — say so, don't imply completeness
+        };
       }
       default:
         return { error: `Unknown tool: ${name}` };
