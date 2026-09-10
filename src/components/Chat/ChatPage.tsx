@@ -179,6 +179,15 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
         if (event === "conversation") {
           resolvedConversationId = data.id as string;
           setConversationId(resolvedConversationId);
+          // Warm the RSC cache for the URL we'll switch to once this reply
+          // finishes streaming (still several seconds away). Without this,
+          // router.replace() below has to wait on /c/[id]'s server-side
+          // session check before it can render, and Next shows loading.tsx
+          // (a full-screen skeleton) for that gap — visually indistinguishable
+          // from a page reload. Prefetching now means that work is already
+          // done by the time we actually navigate, so there's nothing left
+          // to wait on and the skeleton never appears.
+          if (wasNewConversation) router.prefetch(`/c/${resolvedConversationId}`);
           return;
         }
 
