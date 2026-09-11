@@ -1,0 +1,13 @@
+[
+  {
+    "_comment": "TEMPLATE — replace these entries with real questions against your own uploaded documents. Each entry: a question a staff member would actually ask, and either the filename you expect search_documents to surface it from, or a substring you expect to appear in the returned passage text (or both). Aim for 20-30 entries covering your real policy set before trusting this report.",
+    "query": "What is the notice period for resigning?",
+    "expectedFilename": "employee-handbook.pdf",
+    "expectedTextContains": "notice period"
+  },
+  {
+    "query": "How many days of paid sick leave do employees get per year?",
+    "expectedFilename": "employee-handbook.pdf",
+    "expectedTextContains": "sick leave"
+  }
+]

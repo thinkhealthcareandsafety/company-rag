@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: "/documents", label: "Documents" },
   { href: "/shortcuts", label: "Shortcuts" },
   { href: "/team", label: "Team" },
+  { href: "/audit", label: "Audit log" },
   { href: "/errors", label: "Errors" },
 ];
 

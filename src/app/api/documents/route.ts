@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { documents } from "@/lib/db/schema";
-import { ingestDocument } from "@/lib/ingestion/ingestDocument";
+import { enqueueIngestionJob } from "@/lib/ingestion/jobQueue";
 
 export const runtime = "nodejs";
 
@@ -41,11 +41,12 @@ export async function POST(req: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  // Ingestion runs after the response so the upload call returns immediately;
-  // status polling (GET /api/documents) reflects processing -> ready/failed.
-  ingestDocument(doc!.id, buffer).catch((err) => {
-    console.error(`Ingestion failed for document ${doc!.id}:`, err);
-  });
+  // Ingestion is queued, not run inline — a durable Postgres-backed worker
+  // (src/lib/ingestion/jobQueue.ts, started in instrumentation.ts) picks it
+  // up. Unlike the old fire-and-forget promise, this survives a server
+  // restart mid-ingest and retries transient failures automatically.
+  // Status polling (GET /api/documents) reflects processing -> ready/failed.
+  await enqueueIngestionJob(doc!.id, buffer);
 
   return Response.json(doc, { status: 202 });
 }

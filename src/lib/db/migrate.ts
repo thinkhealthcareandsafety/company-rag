@@ -57,6 +57,13 @@ async function main() {
       CREATE INDEX IF NOT EXISTS document_chunks_embedding_hnsw_idx
       ON document_chunks USING hnsw (embedding vector_cosine_ops)
     `;
+    // GIN full-text index backing the keyword half of hybrid search
+    // (retrieval/vectorSearch.ts) — vector search alone misses exact-term
+    // matches (item codes, policy numbers) that don't cluster semantically.
+    await sql`
+      CREATE INDEX IF NOT EXISTS document_chunks_content_fts_idx
+      ON document_chunks USING gin (to_tsvector('english', content))
+    `;
 
     await sql`
       CREATE TABLE IF NOT EXISTS crm_entity_index (
@@ -113,6 +120,36 @@ async function main() {
       )
     `;
     await sql`CREATE INDEX IF NOT EXISTS error_logs_created_at_idx ON error_logs (created_at)`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS ingestion_jobs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        file_bytes BYTEA,
+        status VARCHAR(20) NOT NULL DEFAULT 'queued',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        last_error TEXT,
+        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS ingestion_jobs_status_next_attempt_idx ON ingestion_jobs (status, next_attempt_at)`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+        action VARCHAR(60) NOT NULL,
+        detail JSONB,
+        ok INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at)`;
+    await sql`CREATE INDEX IF NOT EXISTS audit_logs_user_id_idx ON audit_logs (user_id)`;
 
     console.log("Schema is up to date.");
   } finally {

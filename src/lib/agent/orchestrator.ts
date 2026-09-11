@@ -1,6 +1,7 @@
 import type { Content, FunctionCall, Part } from "@google/genai";
 import { getGemini, CHAT_MODEL } from "@/lib/gemini";
 import { logError } from "@/lib/errorLog";
+import { logAudit, summarizeToolCall } from "@/lib/auditLog";
 import { toolDeclarations, executeTool } from "./tools";
 
 const MAX_ITERATIONS = 4;
@@ -55,7 +56,12 @@ export type AgentEvent =
  * if it resolves to function calls we execute them in parallel and loop, if
  * it resolves to a plain answer we've already streamed the tokens live.
  */
-export async function* runAgent(history: Content[]): AsyncGenerator<AgentEvent> {
+export interface AgentAuditContext {
+  userId: string | null;
+  conversationId?: string | null;
+}
+
+export async function* runAgent(history: Content[], audit?: AgentAuditContext): AsyncGenerator<AgentEvent> {
   const contents: Content[] = [...history];
   const gemini = getGemini();
 
@@ -89,7 +95,18 @@ export async function* runAgent(history: Content[]): AsyncGenerator<AgentEvent> 
             : { error: settled.reason instanceof Error ? settled.reason.message : "Tool call timed out or failed" };
 
         const errorMessage = (payload as { error?: string })?.error;
-        yield { type: "tool_result", name: fc.name!, ok: settled.status === "fulfilled" && !errorMessage, result: payload };
+        const toolOk = settled.status === "fulfilled" && !errorMessage;
+        yield { type: "tool_result", name: fc.name!, ok: toolOk, result: payload };
+
+        if (audit) {
+          void logAudit({
+            userId: audit.userId,
+            conversationId: audit.conversationId,
+            action: fc.name!,
+            detail: summarizeToolCall(fc.name!, (fc.args as Record<string, unknown>) ?? {}, payload),
+            ok: toolOk,
+          });
+        }
 
         responseParts.push({
           functionResponse: {

@@ -30,8 +30,13 @@ answer time, so the assistant can never give a stale answer about live business 
 ## Features
 
 - **Agentic tool-calling loop** (hand-rolled, no LangChain — `src/lib/agent/orchestrator.ts`):
-  the model is given 8 tools and decides per-question which to call, running independent ones
+  the model is given 9 tools and decides per-question which to call, running independent ones
   in parallel, up to 4 iterations before forcing a final answer.
+- **Hybrid document retrieval with reranking** (`src/lib/retrieval/vectorSearch.ts`) — fuses
+  pgvector cosine similarity with Postgres full-text keyword search via Reciprocal Rank Fusion
+  (catches exact terms — SKUs, policy numbers, acronyms — that pure vector search can miss),
+  then reranks the fused shortlist with one LLM call (`src/lib/retrieval/rerank.ts`) before
+  returning the final top-k. Falls back to the fused order if the rerank call fails.
 - **Per-user accounts** — private conversation history, managed via the in-app **Team** page
   (no separate admin CLI needed once the first account exists).
 - **Streaming answers** (Server-Sent Events) with **Stop** and **Regenerate** controls.
@@ -40,9 +45,22 @@ answer time, so the assistant can never give a stale answer about live business 
 - **Digest** (`/digest`) — a proactive, code-computed dashboard (no AI in the numbers) showing
   overdue invoices, low-stock items, and CRM deals gone quiet, with one AI-generated
   plain-English summary sentence on top and per-item AI-drafted follow-up messages
-  (draft-and-copy only — nothing is ever sent automatically).
+  (draft-and-copy only — nothing is ever sent automatically). Can also be emailed on a schedule
+  via `POST /api/digest/email` (`src/lib/sendDigestEmail.ts`, Resend).
+- **Durable ingestion queue** (`src/lib/ingestion/jobQueue.ts`) — a document upload enqueues a
+  Postgres-backed job instead of firing an in-process promise; a worker started from
+  `instrumentation.ts` claims jobs with `FOR UPDATE SKIP LOCKED` and retries failures with
+  backoff, so a server restart mid-ingest resumes instead of silently losing the document.
+- **Audit log** (`/audit`) — every document search and live CRM/Books/Inventory tool call is
+  recorded with who asked and what was accessed (record IDs/counts, not full field values),
+  and is never pruned — unlike the Errors page, which is a debugging aid, not a compliance record.
 - **In-app Errors page** — every failure is logged to Postgres and visible to any signed-in
   user, independent of whether Sentry is configured.
+- **Retrieval eval harness** (`npm run eval:retrieval`, `scripts/eval-retrieval.ts`) — runs a
+  golden query set against `searchDocuments` and reports Hit@k and Mean Reciprocal Rank, so a
+  chunking/embedding/reranking change can be measured instead of eyeballed. Ships with a
+  2-entry template (`scripts/eval/retrieval-golden.json`) — replace it with real questions
+  against your own documents before trusting the report.
 - **Reliability fixes worth knowing about**: the model is told the real current date on every
   request (it has no other way to know "today"), and Books/CRM totals are computed exactly in
   code rather than left to the model's arithmetic, with an explicit flag if a result set is too
@@ -182,13 +200,25 @@ deliberately-deferred gaps:
   follow-up messages (copy-only, sent manually by a human). This was a deliberate security
   tradeoff, not an oversight — revisit only with a real, scoped need and a human-approval step.
 - **Multi-tenant row-level ACLs** on documents/chat — any authenticated user sees all
-  documents; there's no per-team or per-role data isolation.
+  documents; there's no per-team or per-role data isolation. (Deliberately not addressed by the
+  reliability work above — it's a bigger, separate design decision: what a role model should
+  look like across documents *and* Zoho data.)
 - **SSO/SAML** — credentials (email + password) only.
 - **Secrets manager** (Vault/AWS Secrets Manager/etc.) instead of `.env` in production.
-- **Background job queue** (e.g. BullMQ) for document ingestion instead of a fire-and-forget
-  promise (`src/app/api/documents/route.ts`) — fine on a single long-running Node process, but
-  a serverless/edge deployment would kill ingestion mid-flight after the HTTP response closes.
 - **OCR** for scanned/image-only PDFs (current extraction requires embedded text).
 - **Observability**: structured request tracing across the vector search + Zoho tool calls,
   latency dashboards, alerting on circuit-breaker trips (Sentry covers unhandled errors, not
   this).
+- **A real message broker + object storage for ingestion** — the job queue above is
+  Postgres-backed (`FOR UPDATE SKIP LOCKED`), which is durable and safe across multiple server
+  instances, but stores each PDF's bytes in a `bytea` column until the job completes. Fine at
+  this app's upload volume; move to a proper queue (e.g. BullMQ) and object storage (e.g. S3)
+  before that volume grows a lot.
+- **A dedicated cross-encoder reranker** — the current reranker reuses the same Gemini model
+  already in the stack rather than a purpose-built reranking model (e.g. Cohere Rerank, a
+  self-hosted cross-encoder), because there's no infrastructure here to host one. It works, but
+  adds an LLM call's worth of latency/cost to every document search.
+- **Free-tier infrastructure**: Gemini's free tier (hence `gemini-3.5-flash-lite`, not the full
+  `flash` model), Render's free Postgres (expires 30 days after creation) and free web service
+  (sleeps after 15 minutes idle). None of this is a code gap — it's a billing decision for
+  whoever owns the Render/Google Cloud accounts, needed before anyone relies on this daily.
