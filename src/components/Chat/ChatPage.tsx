@@ -34,7 +34,10 @@ interface Shortcut {
   prompt: string;
 }
 
-const TOOL_LABELS: Record<string, string> = {
+// Present tense while the call is in flight, past tense once it's resolved
+// (success or failure — the chip's color/dot already carries that distinction)
+// so a finished green chip doesn't still read as an ongoing action.
+const TOOL_LABELS_PENDING: Record<string, string> = {
   search_documents: "Searching documents",
   lookup_crm_entity: "Resolving CRM record",
   get_crm_record: "Fetching live CRM record",
@@ -43,6 +46,18 @@ const TOOL_LABELS: Record<string, string> = {
   get_books_record: "Fetching Books record",
   list_inventory_records: "Querying Zoho Inventory",
   get_inventory_record: "Fetching Inventory record",
+  find_items_by_invoice_history: "Cross-referencing items and invoices",
+};
+const TOOL_LABELS_DONE: Record<string, string> = {
+  search_documents: "Searched documents",
+  lookup_crm_entity: "Resolved CRM record",
+  get_crm_record: "Fetched live CRM record",
+  query_crm_records: "Queried CRM",
+  list_books_records: "Queried Zoho Books",
+  get_books_record: "Fetched Books record",
+  list_inventory_records: "Queried Zoho Inventory",
+  get_inventory_record: "Fetched Inventory record",
+  find_items_by_invoice_history: "Cross-referenced items and invoices",
 };
 
 const SAMPLE_QUESTIONS = ["What is our refund policy?", "Is JYOTHY LABS LIMITED one of our accounts?"];
@@ -293,7 +308,12 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   }
 
   const lastMessage = messages[messages.length - 1];
-  const isThinking = busy && lastMessage?.role === "assistant" && !lastMessage.content && !lastMessage.tools?.length;
+  // Covers two silent gaps, not just "no tools called yet": the model also
+  // goes quiet for a real stretch after every tool has resolved but before
+  // the synthesis call's first token arrives (a full extra round-trip to
+  // Gemini) — that gap used to show nothing once a tool chip had appeared.
+  const allToolsResolved = !lastMessage?.tools?.length || lastMessage.tools.every((t) => t.ok !== undefined);
+  const isThinking = busy && lastMessage?.role === "assistant" && !lastMessage.content && allToolsResolved;
 
   return (
     <div className="chat-page-root-row">
@@ -335,12 +355,16 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
                       <div className="chat-assistant-content">
                         {m.tools && m.tools.length > 0 && (
                           <div className="tool-chip-row">
-                            {m.tools.map((t, idx) => (
-                              <span key={idx} className={`tool-chip ${t.ok === false ? "fail" : t.ok ? "ok" : ""}`}>
-                                {t.ok === undefined ? <span className="spin" /> : <span className="dot" />}
-                                {TOOL_LABELS[t.name] ?? t.name}
-                              </span>
-                            ))}
+                            {m.tools.map((t, idx) => {
+                              const pending = t.ok === undefined;
+                              const label = pending ? (TOOL_LABELS_PENDING[t.name] ?? t.name) : (TOOL_LABELS_DONE[t.name] ?? t.name);
+                              return (
+                                <span key={idx} className={`tool-chip ${t.ok === false ? "fail" : t.ok ? "ok" : ""}`}>
+                                  {pending ? <span className="spin" /> : <span className="dot" />}
+                                  {label}
+                                </span>
+                              );
+                            })}
                           </div>
                         )}
                         {isThinking && i === messages.length - 1 ? (
