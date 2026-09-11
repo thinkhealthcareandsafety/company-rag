@@ -121,7 +121,7 @@ export async function POST(req: Request) {
       const toolActivity: { name: string; ok?: boolean; result?: unknown }[] = [];
 
       try {
-        for await (const event of runAgent(history)) {
+        for await (const event of runAgent(history, { userId, conversationId })) {
           if (event.type === "token") {
             fullContent += event.value;
             send("token", { value: event.value });

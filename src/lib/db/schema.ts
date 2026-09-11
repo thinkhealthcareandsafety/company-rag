@@ -124,6 +124,63 @@ export const errorLogs = pgTable(
   (table) => [index("error_logs_created_at_idx").on(table.createdAt)],
 );
 
+/**
+ * Durable ingestion queue: a document upload inserts one row here instead of
+ * firing ingestDocument() directly. A worker (see ingestion/jobQueue.ts,
+ * started from instrumentation.ts) claims rows with SKIP LOCKED so a server
+ * restart mid-ingest can never lose or duplicate work — the previous
+ * fire-and-forget promise dropped the job silently on restart.
+ */
+export const ingestionJobs = pgTable(
+  "ingestion_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    // The uploaded PDF's bytes, kept only until the job finishes (cleared on
+    // success) — this is what makes ingestion durable across a restart
+    // without adding an object-storage dependency. Move this to real object
+    // storage before high-volume/enterprise use (see README).
+    fileBytes: customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" })("file_bytes"),
+    status: varchar("status", { length: 20 }).notNull().default("queued"), // queued | processing | done | failed
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    lastError: text("last_error"),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("ingestion_jobs_status_next_attempt_idx").on(table.status, table.nextAttemptAt)],
+);
+
+/**
+ * Who looked at what, and when. Separate from error_logs (a debugging aid
+ * that's pruned to the last 500 rows) — this is a compliance record and is
+ * never trimmed. Every tool call the agent makes is logged here with a
+ * redacted summary of what was accessed (module + record id, not full field
+ * values), so "who asked about invoice X" is always answerable without
+ * duplicating live customer data into a second table.
+ */
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    action: varchar("action", { length: 60 }).notNull(), // tool name, e.g. get_books_record
+    // { module?, recordId?, query?, resultCount? } — enough to answer "what
+    // was accessed", deliberately not the full tool result payload.
+    detail: jsonb("detail"),
+    ok: integer("ok").notNull().default(1), // 1 = succeeded, 0 = the tool call errored
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("audit_logs_created_at_idx").on(table.createdAt),
+    index("audit_logs_user_id_idx").on(table.userId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type DocumentChunk = typeof documentChunks.$inferSelect;
@@ -132,3 +189,5 @@ export type PromptShortcut = typeof promptShortcuts.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type ChatMessageRow = typeof chatMessages.$inferSelect;
 export type ErrorLog = typeof errorLogs.$inferSelect;
+export type IngestionJob = typeof ingestionJobs.$inferSelect;
+export type AuditLog = typeof auditLogs.$inferSelect;

@@ -160,7 +160,7 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
             document: r.filename,
             page: r.page,
             heading: r.heading,
-            similarity: Number(r.similarity.toFixed(3)),
+            relevance: r.relevance,
             content: r.content,
           })),
         };
